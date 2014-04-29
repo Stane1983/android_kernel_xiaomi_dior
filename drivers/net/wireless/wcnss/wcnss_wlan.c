@@ -259,7 +259,11 @@ static struct wcnss_pmic_dump wcnss_pmic_reg_dump[] = {
 };
 
 static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
-                                void *ss_handle);
+				void *ss_handle);
+
+static struct notifier_block wnb = {
+	.notifier_call = wcnss_notif_cb,
+};
 
 #define NVBIN_FILE_H3TD  "wlan/prima/WCNSS_qcom_wlan_nv_h3td.bin"
 #define NVBIN_FILE_H3W   "wlan/prima/WCNSS_qcom_wlan_nv_h3w.bin"
@@ -2630,6 +2634,9 @@ wcnss_trigger_config(struct platform_device *pdev)
 
 	if (pil_retry >= WCNSS_MAX_PIL_RETRY) {
 		wcnss_reset_intr();
+		if (penv->wcnss_notif_hdle)
+			subsys_notif_unregister_notifier(penv->wcnss_notif_hdle,
+				&wnb);
 		penv->pil = NULL;
 		goto fail_pil;
 	}
