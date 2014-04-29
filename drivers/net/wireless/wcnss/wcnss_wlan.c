@@ -244,10 +244,17 @@ static struct wcnss_pmic_dump wcnss_pmic_reg_dump[] = {
 	{"LVS1", 0x060},
 };
 
+static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
+                                void *ss_handle);
+
 #define NVBIN_FILE_H3TD  "wlan/prima/WCNSS_qcom_wlan_nv_h3td.bin"
 #define NVBIN_FILE_H3W   "wlan/prima/WCNSS_qcom_wlan_nv_h3w.bin"
 #define NVBIN_FILE_H3GBL "wlan/prima/WCNSS_qcom_wlan_nv_h3gbl.bin"
 #define NVBIN_FILE_H2A   "wlan/prima/WCNSS_qcom_wlan_nv.bin"
+
+static struct notifier_block wnb = {
+	.notifier_call = wcnss_notif_cb,
+};
 
 /*
  * On SMD channel 4K of maximum data can be transferred, including message
@@ -2379,6 +2386,10 @@ wcnss_trigger_config(struct platform_device *pdev)
 	} while (pil_retry++ < WCNSS_MAX_PIL_RETRY && IS_ERR(penv->pil));
 
 	if (pil_retry >= WCNSS_MAX_PIL_RETRY) {
+		wcnss_reset_intr();
+		if (penv->wcnss_notif_hdle)
+			subsys_notif_unregister_notifier(penv->wcnss_notif_hdle,
+				&wnb);
 		penv->pil = NULL;
 		goto fail_pil;
 	}
@@ -2571,11 +2582,6 @@ static int wcnss_notif_cb(struct notifier_block *this, unsigned long code,
 
 	return NOTIFY_DONE;
 }
-
-static struct notifier_block wnb = {
-	.notifier_call = wcnss_notif_cb,
-};
-
 
 static const struct file_operations wcnss_node_fops = {
 	.owner = THIS_MODULE,
