@@ -1475,6 +1475,52 @@ struct kgsl_cmdbatch_sync_event {
 	struct kref refcount;
 };
 
+static void _kgsl_cmdbatch_timer(unsigned long data)
+{
+	struct kgsl_cmdbatch *cmdbatch = (struct kgsl_cmdbatch *) data;
+	struct kgsl_cmdbatch_sync_event *event;
+
+	if (cmdbatch == NULL || cmdbatch->context == NULL)
+		return;
+
+	spin_lock(&cmdbatch->lock);
+	if (list_empty(&cmdbatch->synclist))
+		goto done;
+
+	pr_err("kgsl: possible gpu syncpoint deadlock for context %d timestamp %d\n",
+		cmdbatch->context->id, cmdbatch->timestamp);
+	pr_err(" Active sync points:\n");
+
+	/* Print all the pending sync objects */
+	list_for_each_entry(event, &cmdbatch->synclist, node) {
+
+		switch (event->type) {
+		case KGSL_CMD_SYNCPOINT_TYPE_TIMESTAMP: {
+			unsigned int retired;
+
+			 retired = kgsl_readtimestamp(event->device,
+				event->context, KGSL_TIMESTAMP_RETIRED);
+
+			pr_err("  [timestamp] context %d timestamp %d (retired %d)\n",
+				event->context->id, event->timestamp,
+				retired);
+			break;
+		}
+		case KGSL_CMD_SYNCPOINT_TYPE_FENCE:
+			if (event->handle && event->handle->fence)
+				pr_err("  fence: [%p] %s\n",
+					event->handle->fence,
+					event->handle->fence->name);
+			else
+				pr_err("  fence: invalid\n");
+			break;
+		}
+	}
+
+done:
+	spin_unlock(&cmdbatch->lock);
+}
+
 /**
  * kgsl_cmdbatch_sync_event_destroy() - Destroy a sync event object
  * @kref: Pointer to the kref structure for this object
