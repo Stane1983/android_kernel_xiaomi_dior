@@ -239,6 +239,9 @@ struct kgsl_memobj_node {
  * @cmdlist: List of IBs to issue
  * @memlist: List of all memory used in this command batch
  * @synclist: List of context/timestamp tuples to wait for before issuing
+ * @timer: a timer used to track possible sync timeouts for this cmdbatch
+ * @marker_timestamp: For markers, the timestamp of the last "real" command that
+ * was queued
  *
  * This struture defines an atomic batch of command buffers issued from
  * userspace.
@@ -258,6 +261,8 @@ struct kgsl_cmdbatch {
 	struct list_head cmdlist;
 	struct list_head memlist;
 	struct list_head synclist;
+	struct timer_list timer;
+	unsigned int marker_timestamp;
 };
 
 /**
@@ -601,6 +606,9 @@ void kgsl_cancel_event(struct kgsl_device *device,
 		kgsl_event_func func, void *priv);
 int kgsl_add_event(struct kgsl_device *device, struct kgsl_event_group *group,
 		unsigned int timestamp, kgsl_event_func func, void *priv);
+void kgsl_process_event_group(struct kgsl_device *device,
+	struct kgsl_event_group *group);
+
 void kgsl_process_events(struct work_struct *work);
 
 static inline struct kgsl_device_platform_data *
