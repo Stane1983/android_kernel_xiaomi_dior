@@ -1,3 +1,7 @@
+/*
+* Copyright (C) 2015 XiaoMi, Inc.All rights reserved.
+*/
+
 #ifndef __LINUX_ATMEL_MXT_PLUG
 #define __LINUX_ATMEL_MXT_PLUG
 

@@ -1,52 +1,22 @@
+/*
+* Copyright (C) 2015 XiaoMi, Inc. All rights reserved.
+*/
+
 #ifndef _ASM_GENERIC_BITOPS_ATOMIC_FLAG_H_
 #define _ASM_GENERIC_BITOPS_ATOMIC_FLAG_H_
 
 #include <asm/types.h>
 #include <asm/system.h>
 
-//#ifdef CONFIG_SMP
 #if 0
 #include <asm/spinlock.h>
 #include <asm/cache.h>		/* we use L1_CACHE_BYTES */
-
-/* Use an array of spinlocks for our atomic_ts.
- * Hash function to index into a different SPINLOCK.
- * Since "a" is usually an address, use one spinlock per cacheline.
- */
-#  define ATOMIC_HASH_SIZE 4
-#  define ATOMIC_HASH(a) (&(__atomic_hash[ (((unsigned long) a)/L1_CACHE_BYTES) & (ATOMIC_HASH_SIZE-1) ]))
-
-extern arch_spinlock_t __atomic_hash[ATOMIC_HASH_SIZE] __lock_aligned;
-
-/* Can't use raw_spin_lock_irq because of #include problems, so
- * this is the substitute */
-#define _atomic_spin_lock_irqsave(l,f) do {	\
-	arch_spinlock_t *s = ATOMIC_HASH(l);	\
-	local_irq_save(f);			\
-	arch_spin_lock(s);			\
-} while(0)
-
-#define _atomic_spin_unlock_irqrestore(l,f) do {	\
-	arch_spinlock_t *s = ATOMIC_HASH(l);		\
-	arch_spin_unlock(s);				\
-	local_irq_restore(f);				\
-} while(0)
-
 
 #else
 #  define _atomic_spin_lock_irqsave(l,f) do { local_irq_save(f); } while (0)
 #  define _atomic_spin_unlock_irqrestore(l,f) do { local_irq_restore(f); } while (0)
 #endif
 
-/*
- * NMI events can occur at any time, including when interrupts have been
- * disabled by *_irqsave().  So you can get NMI events occurring while a
- * *_bit function is holding a spin lock.  If the NMI handler also wants
- * to do bit manipulation (and they do) then you can get a deadlock
- * between the original caller of *_bit() and the NMI handler.
- *
- * by Keith Owens
- */
 
 /**
  * set_bit - Atomically set a bit in memory
@@ -93,8 +63,6 @@ static inline void clear_flag(unsigned long mask, volatile unsigned long *addr)
 	_atomic_spin_unlock_irqrestore(p, flags);
 }
 
-//#define set_and_clr_flag(fg, s, c) ((fg) &= ~(c),(fg) |= (s))
-//#define get_flag(fg, m) ((fg) & (m))
 static inline int test_flag(unsigned long mask, volatile unsigned long *addr)
 {
 	return ((*addr) & mask) != 0;

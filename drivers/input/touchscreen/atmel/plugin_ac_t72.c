@@ -2,6 +2,7 @@
  * Atmel maXTouch Touchscreen driver Plug in
  *
  * Copyright (C) 2013 Atmel Co.Ltd
+ *
  * Author: Pitter Liao <pitter.liao@atmel.com>
  * Copyright (C) 2015 XiaoMi, Inc.
  *
@@ -12,32 +13,7 @@
  *
  */
 
-/****************************************************************
-	Pitter Liao add for macro for the global platform
-	email:  pitter.liao@atmel.com
-	mobile: 13244776877
------------------------------------------------------------------*/
 #define PLUG_AC_T72_VERSION 0x0025
-/*----------------------------------------------------------------
-0.23
-1 add dualx message support
-0.222
-1 fixed bug in hook t72
-0.221
-1 testing hook t72
-0.22
-1 change t72 control t9/t8/t55 only after t37 workaround is end
-2 t72 report state to global when noise change
-3 delete t61 timer control
-0.21
-1 add t9/t100, t55 set
-0.2
-1 process t72 noise message to set t8 in noise contion
-0.11
-1 version for simple workaround without debug message
-0.1
-1 first version of t72 plugin
-*/
 
 #include "plug.h"
 
