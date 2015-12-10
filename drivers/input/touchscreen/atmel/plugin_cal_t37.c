@@ -3,7 +3,6 @@
  *
  * Copyright (C) 2013 Atmel Co.Ltd
  * Author: Pitter Liao <pitter.liao@atmel.com>
- *
  * Copyright (C) 2015 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
@@ -13,7 +12,114 @@
  *
  */
 
+/****************************************************************
+	Pitter Liao add for macro for the global platform
+	email:  pitter.liao@atmel.com
+	mobile: 13244776877
+-----------------------------------------------------------------*/
 #define PLUG_CAL_T37_VERSION 0x0106
+/*----------------------------------------------------------------
+0.106
+1 check max grad only at reset
+2 fixed bug in grad cache min value renew
+3 step 2 check failed only try 1 time after resume
+4 fixed bugs of T8 set in each step
+
+0.105
+1 set grad cache instead grad block cache
+2 modify iron reference check
+0.104
+1 set movement check for calibration
+2 change T100 dymatic thold for T8 calibration
+3 set soft T8
+4 support proximity calibration
+5 support T65 disable
+
+0.103
+1 proximity support
+2 move zero check out of LOW
+0.102
+1 add x,y grad accumulator auto select
+2 add movement check in pending
+0.101
+1 add mxt_surface_delta_high_check()
+2 improve function check_touched_and_moving()
+3 improve step2 single touch
+4 improve step3 for stable delta check
+0.100
+1 add auto suspend
+0.99
+1 change gradient algorithm
+2 support bad pointt with 2 algorithm
+3 step wait state machine changed
+
+0.97
+1 add iron/high point check
+2 change interval of each step, return if interval is not reached
+0.96
+1 add watcher in step 2 which only depend t8 before
+2 add drift in step 3 which will detect weak signal
+3 change MAX_TRACE_POINTS to 10
+4 delete high limit in grad cache renew
+5 add x line ref drop check
+0.95
+1 t80 support
+0.94
+1 t38 protect support
+0.93
+1 xline check change
+2 supper big check change
+3 signal check strange is different with ref check
+
+0.92
+1 fix the report rate dropping issue
+
+0.91
+1 fixed bugs at signal check
+
+0.90
+1 max value for 9 area
+2 noise/very noise increase min and max value
+3 supper big grident check
+4 signal gradient check (include key)
+5 t65 firmware bug check
+6 t100/delta firmware bug recovery
+
+0.84
+1 add noise compensation for grad_block_low_limit
+0.83
+1 change back the moving algorithm
+0.82
+1 support t100
+2 fixed some bugs at matrix check
+3 increase single touch check
+4 change movement algorithm
+0.81
+1 fixed bug at resume, the step 2 will wait first touch release
+0.8
+1 fixed step 3 start time issue
+0.7
+1 fiexed issue in step2 check ref 2
+2 add T37_FLAG_TOUCH_ALL_RELEASED flag
+3 clear step_cmd when calibration/resume/reset
+0.6
+1 fixed bugs at step2 check grad max
+0.5:
+1 fixed bugs at t100 hook
+2 fixed bugs at step 4 status
+3 fiexed bugs at show()
+0.4:
+1 fixed bugs(chedck single touch) in step 2
+0.3
+1 gradient reference check add at step 2
+2 touch points trace at t9_hook
+0.2
+1 modify palm weak condition, make a step weaker
+0.11
+1 version for simple workaround without debug message
+0.1
+1 first version of t37 plugin
+*/
 #include "plug.h"
 
 enum{
@@ -1331,7 +1437,7 @@ static int caculate_gradient_accumulator(s16 *grad_buf,const struct rect *area, 
 
 	y_size = surface->y1 - surface->y0 + 1;
 
-	//1.0 caculate jitter value as x axis
+	//1.0 caculate jitter value as x axis 
 	for (i = area->x0; i <= area->x1; i++) {
 		for (j = area->y0; j < area->y1; j++) {//y direction gradient, so y will subtract one
 			pos = i * y_size + j;
@@ -1568,7 +1674,7 @@ static int mxt_surface_gradient_statistics(struct plugin_cal *p, unsigned long p
 	}
 
 	//auto select x,y gradient
-	if (test_flag(ACCUMULATOR_GRAD_X, &grad_acc_flag) &&
+	if (test_flag(ACCUMULATOR_GRAD_X, &grad_acc_flag) && 
 		test_flag(ACCUMULATOR_GRAD_Y, &grad_acc_flag)) {
 		if (accu_x < accu_y) {
 			accu = accu_x;
@@ -1586,7 +1692,7 @@ static int mxt_surface_gradient_statistics(struct plugin_cal *p, unsigned long p
 			cache = gd_cache->y_axis;
 		}
 	}
-	if (test_flag(ACCUMULATOR_GRAD_X, &grad_acc_flag) ||
+	if (test_flag(ACCUMULATOR_GRAD_X, &grad_acc_flag) || 
 		test_flag(ACCUMULATOR_GRAD_Y, &grad_acc_flag)) {
 		if ((accu < cfg->grad_accumulator_high) && test_flag(ACCUMULATOR_GRAD_DRIFT_MASK, &grad_acc_flag)&&
 			!test_flag(ACCUMULATOR_GRAD_DIFF|ACCUMULATOR_GRAD_CACULATE, &grad_acc_flag)) {
@@ -1993,7 +2099,7 @@ static int mxt_surface_ref_iron_check(struct plugin_cal *p, unsigned long flag, 
 	}
 	#if (DBG_LEVEL > 1)
 	if (invalid) {
-		printk(KERN_INFO "[mxt]found a drop surface ref %d delta %d inv %d thld(%hd,%hd,%hd)\n",
+		printk(KERN_INFO "[mxt]found a drop surface ref %d delta %d inv %d thld(%hd,%hd,%hd)\n", 
 			ref_low,delta_high,invalid,thld_l,thld_m,thld_h);
 	}
 	#endif
@@ -2034,7 +2140,7 @@ static int surface_delta_high_check(s16 *d_buf,const struct rect *area, const st
 
 				count_d++;
 				#if (DBG_LEVEL > 1)
-				printk(KERN_INFO "[mxt](%d,%d) %d count_d %d\n",
+				printk(KERN_INFO "[mxt](%d,%d) %d count_d %d\n", 
 					i,j,d_buf[pos],count_d);
 				#endif
 			}
@@ -2438,7 +2544,7 @@ static int mxt_surface_aquire_and_compare_auto(struct plugin_cal *p,int sf,int c
 
 	memcpy(&surface, &dcfg->m[MX_AA], sizeof(struct rect));
 	memcpy(&area, &dcfg->m[MX_AA], sizeof(struct rect));//here area set as whole AA
-	x_size = surface.x1 - surface.x0 + 1;
+	x_size = surface.x1 - surface.x0 + 1; 
 	y_size = surface.y1 - surface.y0 + 1;
 	if (test_flag(ACCUMULATOR_GRAD_DUALX, &flag)) {
 		if (area.x1 == surface.x1)
@@ -2544,7 +2650,7 @@ static int mxt_surface_aquire_and_compare_auto(struct plugin_cal *p,int sf,int c
 static int mxt_surface_aquire_reset(struct plugin_cal *p, int sf,int no_wait)
 {
 	const struct mxt_config *dcfg = p->dcfg;
-	struct plug_interface *pl = container_of(dcfg, struct plug_interface, init_cfg);
+	struct plug_interface *pl = container_of(dcfg, struct plug_interface, init_cfg); 
 	struct device *dev = dcfg->dev;
 	struct t37_observer *obs = p->obs;
 	struct point *sf_info;
@@ -2762,7 +2868,7 @@ static int mxt_proc_step_1_msg(struct plugin_cal *p,unsigned long pl_flag)
 	#endif
 	flag = obs->flag;
 
-	if (test_and_clear_flag(T37_FLAG_RESUME|T37_FLAG_RESET|T37_FLAG_CAL,
+	if (test_and_clear_flag(T37_FLAG_RESUME|T37_FLAG_RESET|T37_FLAG_CAL, 
 				&obs->flag)) {
 		//reset state machine
 		plugin_cal_t37_reset_slots_hook(p);
@@ -2856,7 +2962,7 @@ static int mxt_proc_step_2_msg(struct plugin_cal *p,unsigned long pl_flag)
 			ret = mxt_surface_aquire_and_compare_auto(p,sf,T37_BUFFER_INVALID,0,0,1,flag);
 			if (ret == 0) {
 				if (sf_info->x < x_size) {
-					dev_dbg2(dev, "step_2_msg read ref %d, current x is %d\n",
+					dev_dbg2(dev, "step_2_msg read ref %d, current x is %d\n", 
 							x_size,sf_info->x);
 					ret = -EAGAIN;
 				} else
@@ -3563,7 +3669,7 @@ static int mxt_proc_step_3_msg(struct plugin_cal *p,unsigned long pl_flag)
 					flag = get_gradient_flag(obs->flag,pl_flag);
 
 					state = get_t8_state(obs->step, obs->flag, pl_flag, step_t8, pl->config.num_t8_config);
-					ret = mxt_surface_soft_check_anti_touch(p, flag, T37_DELTA0,
+					ret = mxt_surface_soft_check_anti_touch(p, flag, T37_DELTA0, 
 						&pl_cfg->t9_t100_cfg[T9_T100_NORMAL],
 						&pl_cfg->t8_cfg[state]);
 					if (ret) {
@@ -3634,7 +3740,7 @@ static int mxt_proc_step_3_msg(struct plugin_cal *p,unsigned long pl_flag)
 			 if (test_flag(T37_STATE_TOUCH_MOVING|T37_STATE_TOUCH_MOV_PENDING, &state_move) && pend_times)
 				 pend_times--;
 			if (pend_times)
-				dev_dbg2(dev, "step_3_msg (bad %d pend %d %d mov 0x%lx)\n",
+				dev_dbg2(dev, "step_3_msg (bad %d pend %d %d mov 0x%lx)\n", 
 						ref_cnt->bad,ref_cnt->pend,pend_times,state_move);
 			if (pend_times >= cfg->grad_pend_times) {
 					dev_info2(dev, "step_3_msg signal check accumulator zero set cal (bad %d pend %d %d mov 0x%lx)\n",ref_cnt->bad,ref_cnt->pend,pend_times,state_move);
@@ -3693,7 +3799,7 @@ static int mxt_proc_step_4_msg(struct plugin_cal *p,unsigned long pl_flag)
 static int mxt_proc_step_x_msg(struct plugin_cal *p,unsigned long pl_flag)
 {
 	const struct mxt_config *dcfg = p->dcfg;
-	const struct plug_interface *pl = container_of(dcfg, struct plug_interface, init_cfg);
+	const struct plug_interface *pl = container_of(dcfg, struct plug_interface, init_cfg); 
 	struct device *dev = dcfg->dev;
 	struct t37_observer *obs = p->obs;
 

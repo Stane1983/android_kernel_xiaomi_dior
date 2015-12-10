@@ -12,7 +12,64 @@
  *
  */
 
+/****************************************************************
+	Pitter Liao add for macro for the global platform
+	email:  pitter.liao@atmel.com
+	mobile: 13244776877
+-----------------------------------------------------------------*/
 #define PLUG_VERSION 0x0047
+/*----------------------------------------------------------------
+0.47
+1 add t6 message watchdog
+0.46
+1 alloc mem for store plugin parameter instead of gloable parameter
+0.45
+1 disable plugin in default
+
+0.44
+1 fix busg and store/show function
+2 support internal threshold and algorithm in T100 workaround
+3 support resume flag to sub plugin
+4 fixed bug in dualx threshold
+
+0.43
+1 add t65 lpfilter control
+0.42
+1 deltet print information
+2 impromve
+0.41:
+1 add invlaid value check
+0.40
+1 t65 support
+0.39
+1 fixed bugs which will crash when pluging not inited
+0.38
+1 t80 support
+2 compatible bootloader mode
+0.36
+1 check inited tag at init()
+0.35
+1 add mxt_plugin_hook_reg_init
+0.34
+1 fixed bugs in deinit
+0.33
+1 fixed issue when plugin running but call plug_deinit
+0.32
+1 change check and calibration running indendent plug state
+2 fix some bugs at _store()
+0.31
+1 modify print_trunk()
+0.3
+1 add t9/t100,t55 interface
+0.2
+1 add t61 support
+2 modify t8 array to support step palm weaker
+3 process state even when workaround is pause
+0.11
+1 version for simple workaround without debug message
+0.1
+1 first version support t37 and t72
+*/
 
 #include "plug.h"
 
@@ -346,7 +403,7 @@ static int mxt_diagnostic_command(struct mxt_data *data, u8 cmd, u8 page, u8 ind
 		if (ret) {
 			dev_err(&data->client->dev, "T37 read offset 0 failed %d!\n",ret);
 			return -EIO;
-		}
+		} 
 
 		if (command_register[0] != cmd || command_register[1] != page) {
 			dev_err(&data->client->dev, "T37 page changed (%d,%d) -> (%d,%d)\n",
@@ -1817,7 +1874,7 @@ static struct t8_config mxt_t8_cfg[] = {
 static struct t9_t100_config mxt_t9_t100_cfg[T9_T100_CONFIG_NUM] = {
 	//t38 will overwrite here
 	//T9_T100_NORMAL
-	{0},  //0 means normal setting will be readout from t9/t100 at iniu
+	{0},  //0 means normal setting will be readout from t9/t100 at init
 	//T9_T100_THLD_NOISE
 	{0},
 	//T9_T100_THLD_VERY_NOISE
