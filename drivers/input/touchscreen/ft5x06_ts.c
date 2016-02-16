@@ -926,7 +926,7 @@ static irqreturn_t ft5x06_interrupt(int irq, void *dev_id)
 int ft5x06_suspend(struct ft5x06_data *ft5x06)
 {
 	int error = 0;
-	
+
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
 #ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
 	bool prevent_sleep = (dt2w_switch > 0);
@@ -983,7 +983,7 @@ int ft5x06_resume(struct ft5x06_data *ft5x06)
 
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
 	}
-#endif	
+#endif
 
 	return 0;
 }
@@ -997,9 +997,9 @@ static int fb_notifier_callback(struct notifier_block *self,
 	int *blank;
 	struct ft5x06_data *ft5x06 =
 		container_of(self, struct ft5x06_data, fb_notif);
-		
+
 	if (evdata && evdata->data && event == FB_EVENT_BLANK &&
-			ft5x06 && ft5x06->dev) {		
+			ft5x06 && ft5x06->dev) {
 		blank = evdata->data;
 		if (*blank == FB_BLANK_UNBLANK) {
 			pr_info("ft5x06 resume!\n");

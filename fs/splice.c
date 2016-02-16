@@ -1003,10 +1003,8 @@ generic_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
 		mutex_lock_nested(&inode->i_mutex, I_MUTEX_CHILD);
 		ret = file_remove_suid(out);
 		if (!ret) {
-			ret = file_update_time(out);
-			if (!ret)
-				ret = splice_from_pipe_feed(pipe, &sd,
-							    pipe_to_file);
+			file_update_time(out);
+			ret = splice_from_pipe_feed(pipe, &sd, pipe_to_file);
 		}
 		mutex_unlock(&inode->i_mutex);
 	} while (ret > 0);
@@ -1301,7 +1299,6 @@ long do_splice_direct(struct file *in, loff_t *ppos, struct file *out,
 
 	return ret;
 }
-EXPORT_SYMBOL(do_splice_direct);
 
 static int splice_pipe_to_pipe(struct pipe_inode_info *ipipe,
 			       struct pipe_inode_info *opipe,

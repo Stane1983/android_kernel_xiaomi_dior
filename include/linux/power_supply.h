@@ -4,7 +4,6 @@
  *  Copyright © 2007  Anton Vorontsov <cbou@mail.ru>
  *  Copyright © 2004  Szabolcs Gyurko
  *  Copyright © 2003  Ian Molton <spyro@f2s.com>
- *  Copyright (C) 2015 XiaoMi, Inc.
  *
  *  Modified: 2004, Oct     Szabolcs Gyurko
  *
@@ -46,6 +45,7 @@ enum {
 	POWER_SUPPLY_CHARGE_TYPE_NONE,
 	POWER_SUPPLY_CHARGE_TYPE_TRICKLE,
 	POWER_SUPPLY_CHARGE_TYPE_FAST,
+	POWER_SUPPLY_CHARGE_TYPE_TAPER,
 };
 
 enum {
@@ -107,6 +107,7 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_INPUT_CURRENT_MAX,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_TRIM,
 	POWER_SUPPLY_PROP_INPUT_CURRENT_SETTLED,
+	POWER_SUPPLY_PROP_VCHG_LOOP_DBC_BYPASS,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
 	POWER_SUPPLY_PROP_POWER_NOW,
@@ -287,9 +288,9 @@ static inline int power_supply_powers(struct power_supply *psy,
 				      struct device *dev)
 							{ return -ENOSYS; }
 extern int register_power_supply_notifier(struct notifier_block*)
-							{ return -ENOSYS; }
+                                                        { return -ENOSYS; }
 extern int unregister_power_supply_notifier(struct notifier_block*)
-							{ return -ENOSYS; }
+                                                        { return -ENOSYS; }
 #endif
 
 /* For APM emulation, think legacy userspace. */

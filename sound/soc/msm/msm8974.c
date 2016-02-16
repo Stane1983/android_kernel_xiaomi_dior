@@ -26,11 +26,11 @@
 #include <sound/pcm.h>
 #include <sound/jack.h>
 #include <sound/q6afe-v2.h>
+#include <sound/q6core.h>
 #include <sound/pcm_params.h>
 #include <asm/mach-types.h>
 #include <mach/subsystem_notif.h>
 #include "qdsp6v2/msm-pcm-routing-v2.h"
-#include "qdsp6v2/q6core.h"
 #include "../codecs/wcd9xxx-common.h"
 #include "../codecs/wcd9320.h"
 
@@ -46,6 +46,7 @@
 #define BTSCO_RATE_16KHZ 16000
 
 static int slim0_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
+static int slim0_tx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 static int hdmi_rx_bit_format = SNDRV_PCM_FORMAT_S16_LE;
 
 #define SAMPLING_RATE_48KHZ 48000
@@ -79,7 +80,7 @@ static int msm8974_auxpcm_rate = 8000;
 
 static void *adsp_state_notifier;
 
-#define ADSP_STATE_READY_TIMEOUT_MS 3000
+#define ADSP_STATE_READY_TIMEOUT_MS 50
 
 static inline int param_is_mask(int p)
 {
@@ -727,7 +728,7 @@ static const char *const proxy_rx_ch_text[] = {"One", "Two", "Three", "Four",
 
 static char const *hdmi_rx_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 					"KHZ_192"};
-static const char *const btsco_rate_text[] = {"8000", "16000"};
+static const char *const btsco_rate_text[] = {"BTSCO_RATE_8KHZ", "BTSCO_RATE_16KHZ"};
 static const struct soc_enum msm_btsco_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, btsco_rate_text),
 };
@@ -869,10 +870,10 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
-	case 8000:
+	case 0:
 		msm_btsco_rate = BTSCO_RATE_8KHZ;
 		break;
-	case 16000:
+	case 1:
 		msm_btsco_rate = BTSCO_RATE_16KHZ;
 		break;
 	default:
@@ -1318,7 +1319,7 @@ static int msm_slim_0_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 
 	pr_debug("%s()\n", __func__);
 	param_set_mask(params, SNDRV_PCM_HW_PARAM_FORMAT,
-				   slim0_rx_bit_format);
+				   slim0_tx_bit_format);
 	rate->min = rate->max = 48000;
 	channels->min = channels->max = msm_slim_0_tx_ch;
 

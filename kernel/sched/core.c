@@ -36,6 +36,7 @@
 #include <linux/interrupt.h>
 #include <linux/capability.h>
 #include <linux/completion.h>
+#include <linux/cpufreq.h>
 #include <linux/kernel_stat.h>
 #include <linux/debug_locks.h>
 #include <linux/perf_event.h>
@@ -1609,6 +1610,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
 	unsigned long flags;
 	int cpu, src_cpu, success = 0;
+	int notify = 0;
 
 	smp_wmb();
 	raw_spin_lock_irqsave(&p->pi_lock, flags);
@@ -1666,10 +1668,13 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	ttwu_queue(p, cpu);
 stat:
 	ttwu_stat(p, cpu, wake_flags);
+
+	if (src_cpu != cpu && task_notify_on_migrate(p))
+		notify = 1;
 out:
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
 
-	if (src_cpu != cpu && task_notify_on_migrate(p))
+	if (notify)
 		atomic_notifier_call_chain(&migration_notifier_head,
 					   cpu, (void *)src_cpu);
 	return success;
@@ -2745,6 +2750,9 @@ void account_user_time(struct task_struct *p, cputime_t cputime,
 
 	/* Account for user time used */
 	acct_update_integrals(p);
+
+	/* Account power usage for user time */
+	acct_update_power(p, cputime);
 }
 
 /*
@@ -2795,6 +2803,9 @@ void __account_system_time(struct task_struct *p, cputime_t cputime,
 
 	/* Account for system time used */
 	acct_update_integrals(p);
+
+	/* Account power usage for system time */
+	acct_update_power(p, cputime);
 }
 
 /*
@@ -5539,7 +5550,6 @@ static int __cpuinit sched_cpu_active(struct notifier_block *nfb,
 				      unsigned long action, void *hcpu)
 {
 	switch (action & ~CPU_TASKS_FROZEN) {
-	case CPU_STARTING:
 	case CPU_DOWN_FAILED:
 		set_cpu_active((long)hcpu, true);
 		return NOTIFY_OK;

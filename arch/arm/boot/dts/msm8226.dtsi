@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -494,6 +494,10 @@
 		compatible = "qcom,msm-voice-svc";
 	};
 
+	qcom,msm-voice-svc {
+		compatible = "qcom,msm-voice-svc";
+	};
+
 	qcom,msm-dai-q6 {
 		compatible = "qcom,msm-dai-q6";
 		qcom,msm-dai-q6-sb-0-rx {
@@ -618,6 +622,13 @@
 		qcom,msm-auxpcm-interface = "primary";
 	};
 
+	qcom,avtimer@fe053000 {
+		compatible = "qcom,avtimer";
+		reg = <0xfe053008 0x4>,
+			<0xfe05300c 0x4>;
+		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
+	};
+
 	qcom,wcnss-wlan@fb000000 {
 		compatible = "qcom,wcnss_wlan";
 		reg = <0xfb000000 0x280000>,
@@ -642,10 +653,6 @@
 
 	qcom,msm-adsp-sensors {
 		compatible = "qcom,msm-adsp-sensors";
-		qcom,src-id = <11>;
-		qcom,dst-id = <604>;
-		qcom,ab = <32505856>;
-		qcom,ib = <32505856>;
 	};
 
 	qcom,wdt@f9017000 {
@@ -1066,7 +1073,7 @@
 			<  300000 1525 >,
 			<  384000 1525 >,
 			<  600000 1525 >,
-			<  787200 3051 >,
+			<  787200 1525 >,
 			<  998400 4066 >,
 			< 1094400 4066 >,
 			< 1190400 4066 >,
@@ -1341,6 +1348,7 @@
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,active-only = <0>;
 		qcom,msm-bus,num-paths = <1>;
+		qcom,support-fde;
 		qcom,msm-bus,vectors-KBps =
 				<55 512 0 0>,
 				<55 512 0 0>,
@@ -1356,6 +1364,7 @@
 		interrupts = <0 207 0>;
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
 		qcom,ce-hw-shared;
 		qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
@@ -1374,6 +1383,7 @@
 		interrupts = <0 207 0>;
 		qcom,bam-pipe-pair = <1>;
 		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
 		qcom,ce-hw-shared;
 		qcom,msm-bus,name = "qcedev-noc";
 		qcom,msm-bus,num-cases = <2>;
@@ -1388,6 +1398,12 @@
 		compatible = "arm,cortex-a7-pmu";
 		qcom,irq-is-percpu;
 		interrupts = <1 7 0xf00>;
+	};
+
+	bimc_sharedmem {
+		compatible = "qcom,sharedmem-uio";
+		reg = <0xfc380000 0x00100000>;
+		reg-names = "bimc";
 	};
 };
 

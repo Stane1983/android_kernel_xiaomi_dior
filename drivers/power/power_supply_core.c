@@ -4,7 +4,6 @@
  *  Copyright © 2007  Anton Vorontsov <cbou@mail.ru>
  *  Copyright © 2004  Szabolcs Gyurko
  *  Copyright © 2003  Ian Molton <spyro@f2s.com>
- *  Copyright (C) 2015 XiaoMi, Inc.
  *
  *  Modified: 2004, Oct     Szabolcs Gyurko
  *
@@ -18,7 +17,6 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/power_supply.h>
-#include <linux/notifier.h>
 #include "power_supply.h"
 
 /* exported for the APM Power driver, APM emulation */
@@ -236,7 +234,6 @@ static void power_supply_changed_work(struct work_struct *work)
 				      __power_supply_changed_work);
 
 		power_supply_update_leds(psy);
-		blocking_notifier_call_chain(&power_supply_chain, 0, NULL);
 
 		kobject_uevent(&psy->dev->kobj, KOBJ_CHANGE);
 		spin_lock_irqsave(&psy->changed_lock, flags);

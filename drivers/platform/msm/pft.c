@@ -49,6 +49,7 @@
 #include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/fs.h>
+#include <linux/cdev.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
 #include <linux/cred.h>
@@ -90,7 +91,7 @@
 #define PFT_REQUESTED_MAJOR	213
 
 /* PFT driver name */
-#define PFT_DEVICE_NAME	"pft"
+#define DEVICE_NAME	"pft"
 
 /* Maximum registered applications */
 #define PFT_MAX_APPS	1000
@@ -143,6 +144,9 @@ struct pft_file_info {
  * after the key is removed from the encryption hardware.
  */
 struct pft_device {
+	struct cdev cdev;
+	dev_t device_no;
+	struct class *driver_class;
 	int open_count;
 	int major;
 	enum pft_state state;
@@ -157,6 +161,8 @@ struct pft_device {
 
 /* Device Driver State */
 static struct pft_device *pft_dev;
+
+static struct inode *pft_bio_get_inode(struct bio *bio);
 
 /**
  * pft_is_ready() - driver is initialized and ready.
@@ -214,11 +220,11 @@ static char *inode_to_filename(struct inode *inode)
 }
 
 /**
- * ptf_set_response() - set response error code.
+ * pft_set_response() - set response error code.
  *
  * @error_code: The error code to return on response.
  */
-static inline void ptf_set_response(u32 error_code)
+static inline void pft_set_response(u32 error_code)
 {
 	pft_dev->response.error_code = error_code;
 }
@@ -263,10 +269,11 @@ static int pft_remove_file(struct file *filp)
 	int ret = -ENOENT;
 	struct pft_file_info *tmp = NULL;
 	struct list_head *pos = NULL;
+	struct list_head *next = NULL;
 	bool found = false;
 
 	mutex_lock(&pft_dev->lock);
-	list_for_each(pos, &pft_dev->open_file_list) {
+	list_for_each_safe(pos, next, &pft_dev->open_file_list) {
 		tmp = list_entry(pos, struct pft_file_info, list);
 		if (filp == tmp->file) {
 			found = true;
@@ -389,6 +396,9 @@ static inline u32 pft_get_inode_key_index(struct inode *inode)
 static inline bool pft_is_tag_valid(struct inode *inode)
 {
 	struct inode_security_struct *isec = inode->i_security;
+
+	if (isec == NULL)
+		return false;
 
 	return ((isec->tag & PFT_TAG_MAGIC_MASK) == PFT_TAG_MAGIC) ?
 		true : false;
@@ -564,27 +574,6 @@ static bool pft_is_encrypted_file(struct dentry *dentry)
 }
 
 /**
- * pft_is_encrypted_inode() - is the file encrypted.
- * @inode: inode of file to check.
- *
- * Return: true if the file is encrypted, false otherwise.
- */
-static bool pft_is_encrypted_inode(struct inode *inode)
-{
-	u32 tag;
-
-	if (!pft_is_ready())
-		return false;
-
-	if (!pft_is_xattr_supported(inode))
-		return false;
-
-	tag = pft_get_inode_tag(inode);
-
-	return pft_is_file_encrypted(tag);
-}
-
-/**
  * pft_is_inplace_inode() - is this the inode of file for
  * in-place encryption.
  * @inode: inode of file to check.
@@ -637,10 +626,11 @@ static inline bool pft_is_inplace_file(struct file *filp)
  *
  * Return: 0 on successe, negative value on failure.
  */
-int pft_get_key_index(struct inode *inode, u32 *key_index,
+int pft_get_key_index(struct bio *bio, u32 *key_index,
 		      bool *is_encrypted, bool *is_inplace)
 {
 	u32 tag = 0;
+	struct inode *inode = NULL;
 
 	if (!pft_is_ready())
 		return -ENODEV;
@@ -648,7 +638,7 @@ int pft_get_key_index(struct inode *inode, u32 *key_index,
 	if (!selinux_is_enabled())
 		return -ENODEV;
 
-	if (!inode)
+	if (!bio)
 		return -EPERM;
 
 	if (!is_encrypted) {
@@ -663,6 +653,10 @@ int pft_get_key_index(struct inode *inode, u32 *key_index,
 		pr_err("key_index is NULL\n");
 		return -EPERM;
 	}
+
+	inode = pft_bio_get_inode(bio);
+	if (!inode)
+		return -EINVAL;
 
 	if (!pft_is_tag_valid(inode)) {
 		pr_debug("file %s, Tag not valid\n", inode_to_filename(inode));
@@ -699,8 +693,27 @@ EXPORT_SYMBOL(pft_get_key_index);
  */
 static struct inode *pft_bio_get_inode(struct bio *bio)
 {
-	if (!bio || !bio->bi_io_vec || !bio->bi_io_vec->bv_page ||
-	    !bio->bi_io_vec->bv_page->mapping)
+	if (!bio)
+		return NULL;
+	if (!bio->bi_io_vec)
+		return NULL;
+	if (!bio->bi_io_vec->bv_page)
+		return NULL;
+
+	if (PageAnon(bio->bi_io_vec->bv_page)) {
+		struct inode *inode;
+
+		/* Using direct-io (O_DIRECT) without page cache */
+		inode = dio_bio_get_inode(bio);
+		pr_debug("inode on direct-io, inode = 0x%x.\n", (int) inode);
+
+		return inode;
+	}
+
+	if (!bio->bi_io_vec->bv_page->mapping)
+		return NULL;
+
+	if (!bio->bi_io_vec->bv_page->mapping->host)
 		return NULL;
 
 	return bio->bi_io_vec->bv_page->mapping->host;
@@ -726,12 +739,15 @@ bool pft_allow_merge_bio(struct bio *bio1, struct bio *bio2)
 	bool is_inplace = false; /* N.A. */
 	int ret;
 
-	ret = pft_get_key_index(pft_bio_get_inode(bio1), &key_index1,
+	if (!pft_is_ready())
+		return true;
+
+	ret = pft_get_key_index(bio1, &key_index1,
 				&is_encrypted1, &is_inplace);
 	if (ret)
 		is_encrypted1 = false;
 
-	ret = pft_get_key_index(pft_bio_get_inode(bio2), &key_index2,
+	ret = pft_get_key_index(bio2, &key_index2,
 				&is_encrypted2, &is_inplace);
 	if (ret)
 		is_encrypted2 = false;
@@ -874,92 +890,6 @@ int pft_inode_mknod(struct inode *dir, struct dentry *dentry,
 EXPORT_SYMBOL(pft_inode_mknod);
 
 /**
- * pft_inode_symlink() - symlink file hook (callback)
- * @dir:	directory inode pointer
- * @dentry:	file dentry pointer
- * @name:	Old file name
- *
- * Allow only enterprise app to create symlink to enterprise
- * file.
- * Call path:
- * vfs_symlink()->security_inode_symlink()->selinux_inode_symlink()
- *
- * Return: 0 on allowed operation, negative value otherwise.
- */
-int pft_inode_symlink(struct inode *dir, struct dentry *dentry,
-		      const char *name)
-{
-	struct inode *inode;
-
-	if (!dir) {
-		pr_err("dir is NULL.\n");
-		return 0;
-	}
-	if (!dentry) {
-		pr_err("dentry is NULL.\n");
-		return 0;
-	}
-	if (!name) {
-		pr_err("name is NULL.\n");
-		return 0;
-	}
-
-	pr_debug("symlink for file [%s] dir [%s] dentry [%s] started! ....\n",
-		 name, inode_to_filename(dir), dentry->d_iname);
-	inode = dentry->d_inode;
-
-	if (!dentry->d_inode) {
-		pr_debug("d_inode is NULL.\n");
-		return 0;
-	}
-
-	if (!pft_is_ready())
-		return 0;
-
-	/* do nothing for non-encrypted files */
-	if (!pft_is_encrypted_inode(inode))
-		return 0;
-
-	/*
-	 * Only PFM allowed to access in-place-encryption-file
-	 * during in-place-encryption process
-	 */
-	if (pft_is_inplace_inode(inode)) {
-		pr_err("symlink for in-place-encryption file %s by pid %d is blocked.\n",
-			 inode_to_filename(inode), current_pid());
-		return -EACCES;
-	}
-
-	switch (pft_dev->state) {
-	case PFT_STATE_DEACTIVATED:
-	case PFT_STATE_KEY_REMOVED:
-	case PFT_STATE_DEACTIVATING:
-	case PFT_STATE_REMOVING_KEY:
-		/* Block any access for encrypted files when key not loaded */
-		pr_debug("key not loaded. uid (%u) can not access file %s\n",
-			 current_uid(), inode_to_filename(inode));
-		return -EACCES;
-	case PFT_STATE_KEY_LOADED:
-		 /* Only registered apps may access encrypted files. */
-		if (!pft_is_current_process_registered()) {
-			pr_err("unregistered app uid %u pid %u is trying to access encrypted file %s\n",
-			       current_uid(), current_pid(), name);
-			return -EACCES;
-		}
-		break;
-	default:
-		BUG(); /* State is set by "set state" command */
-		break;
-	}
-
-	pr_debug("symlink for file %s ok.\n", name);
-
-	return 0;
-
-}
-EXPORT_SYMBOL(pft_inode_symlink);
-
-/**
  * pft_inode_rename() - file rename hook.
  * @inode:	directory inode
  * @dentry:	file dentry
@@ -1018,11 +948,16 @@ EXPORT_SYMBOL(pft_inode_rename);
  */
 int pft_file_open(struct file *filp, const struct cred *cred)
 {
+	int ret;
+
 	if (!filp || !filp->f_path.dentry)
 		return 0;
 
 	if (!pft_is_ready())
 		return 0;
+
+	if (filp->f_flags & O_DIRECT)
+		pr_debug("file %s using O_DIRECT.\n", file_to_filename(filp));
 
 	/* do nothing for non-encrypted files */
 	if (!pft_is_encrypted_file(filp->f_dentry))
@@ -1056,7 +991,12 @@ int pft_file_open(struct file *filp, const struct cred *cred)
 			return -EACCES;
 		}
 
-		pft_add_file(filp);
+		ret = pft_add_file(filp);
+		if (ret) {
+			pr_err("failed to add file %s to the list.\n",
+			       file_to_filename(filp));
+			return -EFAULT;
+		}
 		break;
 	default:
 		BUG(); /* State is set by "set state" command */
@@ -1223,7 +1163,7 @@ int pft_inode_unlink(struct inode *dir, struct dentry *dentry)
 	if (pft_is_inplace_inode(inode)) {
 		pr_err("block delete in-place-encryption file %s by uid [%d] pid [%d], while encryption in progress.\n",
 		       inode_to_filename(inode), current_uid(), current_pid());
-		return -EACCES;
+		return -EBUSY;
 	}
 
 	if (!pft_is_current_process_registered()) {
@@ -1283,20 +1223,16 @@ static void pft_close_opened_enc_files(void)
 {
 	struct pft_file_info *tmp = NULL;
 	struct list_head *pos = NULL;
+	struct list_head *next = NULL;
 
-	mutex_lock(&pft_dev->lock);
-	list_for_each(pos, &pft_dev->open_file_list) {
+	list_for_each_safe(pos, next, &pft_dev->open_file_list) {
 		struct file *filp;
 		tmp = list_entry(pos, struct pft_file_info, list);
 		filp = tmp->file;
-		pr_debug("file %s\n is being closed",
-			 file_to_filename(filp));
-		pft_sync_file(filp);
+		pr_debug("closing file %s.\n", file_to_filename(filp));
+		/* filp_close() eventually calls pft_file_close() */
 		filp_close(filp, NULL);
-		list_del(&tmp->list);
-		kfree(tmp);
 	}
-	mutex_unlock(&pft_dev->lock);
 }
 
 /**
@@ -1316,13 +1252,13 @@ static int pft_set_state(struct pft_command *command, int size)
 
 	if (size != expected_size) {
 		pr_err("Invalid buffer size\n");
-		ptf_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
+		pft_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
 		return -EINVAL;
 	}
 
 	if (state >= PFT_STATE_MAX_INDEX) {
 		pr_err("Invalid state %d\n", command->set_state.state);
-		ptf_set_response(PFT_CMD_RESP_INVALID_STATE);
+		pft_set_response(PFT_CMD_RESP_INVALID_STATE);
 		return 0;
 	}
 
@@ -1337,11 +1273,11 @@ static int pft_set_state(struct pft_command *command, int size)
 	case PFT_STATE_KEY_LOADED:
 	case PFT_STATE_KEY_REMOVED:
 		pft_dev->state = command->set_state.state;
-		ptf_set_response(PFT_CMD_RESP_SUCCESS);
+		pft_set_response(PFT_CMD_RESP_SUCCESS);
 		break;
 	default:
 		pr_err("Invalid state %d\n", command->set_state.state);
-		ptf_set_response(PFT_CMD_RESP_INVALID_STATE);
+		pft_set_response(PFT_CMD_RESP_INVALID_STATE);
 		break;
 	}
 
@@ -1394,14 +1330,14 @@ static int pft_set_inplace_file(struct pft_command *command, int size)
 	if (size != expected_size) {
 		pr_err("invalid command size %d expected %d.\n",
 		       size, expected_size);
-		ptf_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
+		pft_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
 		return -EINVAL;
 	}
 
 	if (pft_dev->state != (u32) PFT_STATE_KEY_LOADED) {
 		pr_err("Key not loaded, state [%d], In-place-encryption is not allowed.\n",
 		       pft_dev->state);
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_GENERAL_ERROR);
 		return 0;
 	}
 
@@ -1410,7 +1346,7 @@ static int pft_set_inplace_file(struct pft_command *command, int size)
 		pr_err("file %s in-place-encryption in progress.\n",
 		       file_to_filename(pft_dev->inplace_file));
 		/* @todo - use new error code */
-		ptf_set_response(PFT_CMD_RESP_INPLACE_FILE_IS_OPEN);
+		pft_set_response(PFT_CMD_RESP_INPLACE_FILE_IS_OPEN);
 		return 0;
 	}
 
@@ -1419,14 +1355,14 @@ static int pft_set_inplace_file(struct pft_command *command, int size)
 
 	if (filp == NULL) {
 		pr_err("failed to find file by fd %d.\n", fd);
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_GENERAL_ERROR);
 		return 0;
 	}
 
 	/* Verify the file is not already open by other than PFM */
 	if (!filp->f_path.dentry || !filp->f_path.dentry->d_inode) {
 		pr_err("failed to get inode of inplace-file.\n");
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_GENERAL_ERROR);
 		return 0;
 	}
 
@@ -1435,7 +1371,7 @@ static int pft_set_inplace_file(struct pft_command *command, int size)
 	if (writecount > 1) {
 		pr_err("file %s is opened %d times for write.\n",
 		       file_to_filename(filp), writecount);
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_INPLACE_FILE_IS_OPEN);
 		return 0;
 	}
 
@@ -1448,7 +1384,7 @@ static int pft_set_inplace_file(struct pft_command *command, int size)
 	if (pft_is_encrypted_file(filp->f_dentry)) {
 		pr_err("file %s is already encrypted.\n",
 		       file_to_filename(filp));
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_GENERAL_ERROR);
 		return 0;
 	}
 
@@ -1469,11 +1405,11 @@ static int pft_set_inplace_file(struct pft_command *command, int size)
 	if (!rc) {
 		pr_debug("tagged file %s to be encrypted.\n",
 			 file_to_filename(pft_dev->inplace_file));
-		ptf_set_response(PFT_CMD_RESP_SUCCESS);
+		pft_set_response(PFT_CMD_RESP_SUCCESS);
 	} else {
 		pr_err("failed to tag file %s for encryption.\n",
 			file_to_filename(pft_dev->inplace_file));
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_GENERAL_ERROR);
 	}
 
 	return 0;
@@ -1500,7 +1436,7 @@ static int pft_update_reg_apps(struct pft_command *command, int size)
 	if (items_count > PFT_MAX_APPS) {
 		pr_err("Number of apps [%d] > max apps [%d]\n",
 		       items_count , PFT_MAX_APPS);
-		ptf_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
+		pft_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
 		return -EINVAL;
 	}
 
@@ -1512,7 +1448,7 @@ static int pft_update_reg_apps(struct pft_command *command, int size)
 	if (size != expected_size) {
 		pr_err("invalid command size %d expected %d.\n",
 		       size, expected_size);
-		ptf_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
+		pft_set_response(PFT_CMD_RESP_INVALID_CMD_PARAMS);
 		return -EINVAL;
 	}
 
@@ -1534,7 +1470,7 @@ static int pft_update_reg_apps(struct pft_command *command, int size)
 
 	if (!buf) {
 		pr_err("malloc failure\n");
-		ptf_set_response(PFT_CMD_RESP_GENERAL_ERROR);
+		pft_set_response(PFT_CMD_RESP_GENERAL_ERROR);
 		mutex_unlock(&pft_dev->lock);
 		return 0;
 	}
@@ -1544,7 +1480,7 @@ static int pft_update_reg_apps(struct pft_command *command, int size)
 	pr_debug("uid_count = %d\n", pft_dev->uid_count);
 	for (i = 0; i < pft_dev->uid_count; i++)
 		pft_dev->uid_table[i] = command->update_app_list.table[i];
-	ptf_set_response(PFT_CMD_RESP_SUCCESS);
+	pft_set_response(PFT_CMD_RESP_SUCCESS);
 	mutex_unlock(&pft_dev->lock);
 
 	return 0;
@@ -1559,7 +1495,7 @@ static int pft_update_reg_apps(struct pft_command *command, int size)
  */
 static int pft_handle_command(void *buf, int buf_size)
 {
-	size_t ret = 0;
+	int ret = 0;
 	struct pft_command *command = NULL;
 
 	/* opcode field is the minimum length of command */
@@ -1584,7 +1520,7 @@ static int pft_handle_command(void *buf, int buf_size)
 		break;
 	default:
 		pr_err("Invalid command_op_code %u\n", command->opcode);
-		ptf_set_response(PFT_CMD_RESP_INVALID_COMMAND);
+		pft_set_response(PFT_CMD_RESP_INVALID_COMMAND);
 		return 0;
 	}
 
@@ -1617,7 +1553,7 @@ static int pft_device_open(struct inode *inode, struct file *file)
 static int pft_device_release(struct inode *inode, struct file *file)
 {
 	mutex_lock(&pft_dev->lock);
-	if (0 < pft_dev->open_count)
+	if (pft_dev->open_count > 0)
 		pft_dev->open_count--;
 	pft_dev->pfm_pid = UINT_MAX;
 	mutex_unlock(&pft_dev->lock);
@@ -1707,19 +1643,96 @@ static const struct file_operations fops = {
 	.release = pft_device_release,
 };
 
+static int __init pft_register_chardev(void)
+{
+	int rc;
+	unsigned baseminor = 0;
+	unsigned count = 1;
+	struct device *class_dev;
+
+	rc = alloc_chrdev_region(&pft_dev->device_no, baseminor, count,
+				 DEVICE_NAME);
+	if (rc < 0) {
+		pr_err("alloc_chrdev_region failed %d\n", rc);
+		return rc;
+	}
+
+	pft_dev->driver_class = class_create(THIS_MODULE, DEVICE_NAME);
+	if (IS_ERR(pft_dev->driver_class)) {
+		rc = -ENOMEM;
+		pr_err("class_create failed %d\n", rc);
+		goto exit_unreg_chrdev_region;
+	}
+
+	class_dev = device_create(pft_dev->driver_class, NULL,
+				  pft_dev->device_no, NULL,
+				  DEVICE_NAME);
+	if (!class_dev) {
+		pr_err("class_device_create failed %d\n", rc);
+		rc = -ENOMEM;
+		goto exit_destroy_class;
+	}
+
+	cdev_init(&pft_dev->cdev, &fops);
+	pft_dev->cdev.owner = THIS_MODULE;
+
+	rc = cdev_add(&pft_dev->cdev, MKDEV(MAJOR(pft_dev->device_no), 0), 1);
+	if (rc < 0) {
+		pr_err("cdev_add failed %d\n", rc);
+		goto exit_destroy_device;
+	}
+
+	return 0;
+
+exit_destroy_device:
+	device_destroy(pft_dev->driver_class, pft_dev->device_no);
+exit_destroy_class:
+	class_destroy(pft_dev->driver_class);
+exit_unreg_chrdev_region:
+	unregister_chrdev_region(pft_dev->device_no, 1);
+	return rc;
+}
+
+static void __exit pft_unregister_chrdev(void)
+{
+	cdev_del(&pft_dev->cdev);
+	device_destroy(pft_dev->driver_class, pft_dev->device_no);
+	class_destroy(pft_dev->driver_class);
+	unregister_chrdev_region(pft_dev->device_no, 1);
+
+}
+
+static void  __exit pft_free_open_files_list(void)
+{
+	struct pft_file_info *tmp = NULL;
+	struct list_head *pos = NULL;
+	struct list_head *next = NULL;
+
+	mutex_lock(&pft_dev->lock);
+	list_for_each_safe(pos, next, &pft_dev->open_file_list) {
+		tmp = list_entry(pos, struct pft_file_info, list);
+		list_del(&tmp->list);
+		kfree(tmp);
+	}
+	mutex_unlock(&pft_dev->lock);
+}
+
 static void __exit pft_exit(void)
 {
 	if (pft_dev == NULL)
 		return;
 
-	unregister_chrdev(pft_dev->major, PFT_DEVICE_NAME);
+	pft_unregister_chrdev();
+	pft_free_open_files_list();
 
 	kfree(pft_dev->uid_table);
 	kfree(pft_dev);
+	pft_dev = NULL;
 }
 
 static int __init pft_init(void)
 {
+	int ret;
 	struct pft_device *dev = NULL;
 
 	dev = kzalloc(sizeof(struct pft_device), GFP_KERNEL);
@@ -1727,19 +1740,19 @@ static int __init pft_init(void)
 		pr_err("No memory for device structr\n");
 		return -ENOMEM;
 	}
+	pft_dev = dev;
 
 	dev->state = PFT_STATE_DEACTIVATED;
+	dev->pfm_pid = UINT_MAX;
+
 	INIT_LIST_HEAD(&dev->open_file_list);
 	mutex_init(&dev->lock);
 
-	dev->major = register_chrdev(PFT_REQUESTED_MAJOR, PFT_DEVICE_NAME,
-				     &fops);
-	if (IS_ERR_VALUE(dev->major)) {
-		pr_err("Registering the character device with major %d failed with %d\n",
-		       PFT_REQUESTED_MAJOR, dev->major);
+	ret = pft_register_chardev();
+	if (ret) {
+		pr_err("create character device failed.\n");
 		goto fail;
 	}
-	pft_dev = dev;
 
 	pr_info("Drivr initialized successfully %s %s.n", __DATE__, __TIME__);
 
@@ -1748,6 +1761,7 @@ static int __init pft_init(void)
 fail:
 	pr_err("Failed to init driver.\n");
 	kfree(dev);
+	pft_dev = NULL;
 
 	return -ENODEV;
 }

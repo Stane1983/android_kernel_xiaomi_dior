@@ -314,7 +314,7 @@ static int msm_tx_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 }
 
 
-static const char *const btsco_rate_text[] = {"8000", "16000"};
+static const char *const btsco_rate_text[] = {"BTSCO_RATE_8KHZ", "BTSCO_RATE_16KHZ"};
 static const struct soc_enum msm_btsco_enum[] = {
 	SOC_ENUM_SINGLE_EXT(2, btsco_rate_text),
 };
@@ -334,10 +334,10 @@ static int msm_btsco_rate_put(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
 	switch (ucontrol->value.integer.value[0]) {
-	case 8000:
+	case 0:
 		msm_btsco_rate = BTSCO_RATE_8KHZ;
 		break;
-	case 16000:
+	case 1:
 		msm_btsco_rate = BTSCO_RATE_16KHZ;
 		break;
 	default:
@@ -1023,21 +1023,6 @@ static struct snd_soc_dai_link msm8x10_dai[] = {
 		.be_id = MSM_FRONTEND_DAI_QCHAT,
 	},
 	{/* hw:x,15 */
-		.name = "MSM8x10 Vibra",
-		.stream_name = "MultiMedia6",
-		.cpu_dai_name   = "MultiMedia6",
-		.platform_name  = "msm-pcm-dsp.2",
-		.dynamic = 1,
-		.codec_dai_name = "snd-soc-dummy-dai",
-		.codec_name = "snd-soc-dummy",
-		.trigger = {SND_SOC_DPCM_TRIGGER_POST,
-				SND_SOC_DPCM_TRIGGER_POST},
-		.ignore_suspend = 1,
-		/* this dainlink has playback support */
-		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA6,
-	},
-	{/* hw:x,16 */
 		.name = "MSM8X10 Media9",
 		.stream_name = "MultiMedia9",
 		.cpu_dai_name   = "MultiMedia9",
@@ -1050,7 +1035,7 @@ static struct snd_soc_dai_link msm8x10_dai[] = {
 		.ignore_suspend = 1,
 		/* this dainlink has playback support */
 		.ignore_pmdown_time = 1,
-		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA9,
+		.be_id = MSM_FRONTEND_DAI_MULTIMEDIA9
 	},
 	/* Backend I2S DAI Links */
 	{

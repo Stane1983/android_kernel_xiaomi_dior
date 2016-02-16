@@ -4464,4 +4464,3 @@ module_exit(mxt_exit);
 MODULE_AUTHOR("Lionel Zhang <zhangbo_a@xiaomi.com>");
 MODULE_DESCRIPTION("Atmel maXTouch Touchscreen driver");
 MODULE_LICENSE("GPL");
-

@@ -160,7 +160,7 @@ static inline struct proc_dir_entry *proc_create(const char *name, umode_t mode,
 }
 
 static inline struct proc_dir_entry *create_proc_read_entry(const char *name,
-	umode_t mode, struct proc_dir_entry *base, 
+	umode_t mode, struct proc_dir_entry *base,
 	read_proc_t *read_proc, void * data)
 {
 	struct proc_dir_entry *res=create_proc_entry(name,mode,base);
@@ -170,7 +170,7 @@ static inline struct proc_dir_entry *create_proc_read_entry(const char *name,
 	}
 	return res;
 }
- 
+
 extern struct proc_dir_entry *proc_net_fops_create(struct net *net,
 	const char *name, umode_t mode, const struct file_operations *fops);
 extern void proc_net_remove(struct net *net, const char *name);
@@ -215,7 +215,7 @@ static inline struct proc_dir_entry *proc_mkdir_mode(const char *name,
 	umode_t mode, struct proc_dir_entry *parent) { return NULL; }
 
 static inline struct proc_dir_entry *create_proc_read_entry(const char *name,
-	umode_t mode, struct proc_dir_entry *base, 
+	umode_t mode, struct proc_dir_entry *base,
 	read_proc_t *read_proc, void * data) { return NULL; }
 
 struct tty_driver;
@@ -272,6 +272,7 @@ struct proc_ns_operations {
 extern const struct proc_ns_operations netns_operations;
 extern const struct proc_ns_operations utsns_operations;
 extern const struct proc_ns_operations ipcns_operations;
+extern const struct proc_ns_operations pidns_operations;
 extern const struct proc_ns_operations mntns_operations;
 
 union proc_op {

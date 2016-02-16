@@ -328,36 +328,6 @@ static inline int do_inode_permission(struct inode *inode, int mask)
 }
 
 /**
- * inode_only_permission  -  check access rights to a given inode only
- * @inode:	inode to check permissions on
- * @mask:	right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC, ...)
- *
- * Uses to check read/write/execute permissions on an inode directly, we do
- * not check filesystem permissions.
- */
-int inode_only_permission(struct inode *inode, int mask)
-{
-	int retval;
-
-	/*
-	 * Nobody gets write access to an immutable file.
-	 */
-	if (unlikely(mask & MAY_WRITE) && IS_IMMUTABLE(inode))
-		return -EACCES;
-
-	retval = do_inode_permission(inode, mask);
-	if (retval)
-		return retval;
-
-	retval = devcgroup_inode_permission(inode, mask);
-	if (retval)
-		return retval;
-
-	return security_inode_permission(inode, mask);
-}
-EXPORT_SYMBOL(inode_only_permission);
-
-/**
  * inode_permission  -  check for access rights to a given inode
  * @inode:	inode to check permission on
  * @mask:	right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC, ...)
@@ -371,6 +341,8 @@ EXPORT_SYMBOL(inode_only_permission);
  */
 int inode_permission(struct inode *inode, int mask)
 {
+	int retval;
+
 	if (unlikely(mask & MAY_WRITE)) {
 		umode_t mode = inode->i_mode;
 
@@ -380,9 +352,23 @@ int inode_permission(struct inode *inode, int mask)
 		if (IS_RDONLY(inode) &&
 		    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)))
 			return -EROFS;
+
+		/*
+		 * Nobody gets write access to an immutable file.
+		 */
+		if (IS_IMMUTABLE(inode))
+			return -EACCES;
 	}
 
-	return inode_only_permission(inode, mask);
+	retval = do_inode_permission(inode, mask);
+	if (retval)
+		return retval;
+
+	retval = devcgroup_inode_permission(inode, mask);
+	if (retval)
+		return retval;
+
+	return security_inode_permission(inode, mask);
 }
 
 /**
@@ -476,7 +462,7 @@ static int unlazy_walk(struct nameidata *nd, struct dentry *dentry)
 	mntget(nd->path.mnt);
 
 	rcu_read_unlock();
-	br_read_unlock(&vfsmount_lock);
+	br_read_unlock(vfsmount_lock);
 	nd->flags &= ~LOOKUP_RCU;
 	return 0;
 
@@ -534,14 +520,14 @@ static int complete_walk(struct nameidata *nd)
 		if (unlikely(!__d_rcu_to_refcount(dentry, nd->seq))) {
 			spin_unlock(&dentry->d_lock);
 			rcu_read_unlock();
-			br_read_unlock(&vfsmount_lock);
+			br_read_unlock(vfsmount_lock);
 			return -ECHILD;
 		}
 		BUG_ON(nd->inode != dentry->d_inode);
 		spin_unlock(&dentry->d_lock);
 		mntget(nd->path.mnt);
 		rcu_read_unlock();
-		br_read_unlock(&vfsmount_lock);
+		br_read_unlock(vfsmount_lock);
 	}
 
 	if (likely(!(nd->flags & LOOKUP_JUMPED)))
@@ -702,31 +688,21 @@ static int follow_up_rcu(struct path *path)
 	return 1;
 }
 
-/*
- * follow_up - Find the mountpoint of path's vfsmount
- *
- * Given a path, find the mountpoint of its source file system.
- * Replace @path with the path of the mountpoint in the parent mount.
- * Up is towards /.
- *
- * Return 1 if we went up a level and 0 if we were already at the
- * root.
- */
 int follow_up(struct path *path)
 {
 	struct mount *mnt = real_mount(path->mnt);
 	struct mount *parent;
 	struct dentry *mountpoint;
 
-	br_read_lock(&vfsmount_lock);
+	br_read_lock(vfsmount_lock);
 	parent = mnt->mnt_parent;
 	if (&parent->mnt == path->mnt) {
-		br_read_unlock(&vfsmount_lock);
+		br_read_unlock(vfsmount_lock);
 		return 0;
 	}
 	mntget(&parent->mnt);
 	mountpoint = dget(mnt->mnt_mountpoint);
-	br_read_unlock(&vfsmount_lock);
+	br_read_unlock(vfsmount_lock);
 	dput(path->dentry);
 	path->dentry = mountpoint;
 	mntput(path->mnt);
@@ -984,7 +960,7 @@ failed:
 	if (!(nd->flags & LOOKUP_ROOT))
 		nd->root.mnt = NULL;
 	rcu_read_unlock();
-	br_read_unlock(&vfsmount_lock);
+	br_read_unlock(vfsmount_lock);
 	return -ECHILD;
 }
 
@@ -1289,7 +1265,7 @@ static void terminate_walk(struct nameidata *nd)
 		if (!(nd->flags & LOOKUP_ROOT))
 			nd->root.mnt = NULL;
 		rcu_read_unlock();
-		br_read_unlock(&vfsmount_lock);
+		br_read_unlock(vfsmount_lock);
 	}
 }
 
@@ -1642,7 +1618,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 		nd->path = nd->root;
 		nd->inode = inode;
 		if (flags & LOOKUP_RCU) {
-			br_read_lock(&vfsmount_lock);
+			br_read_lock(vfsmount_lock);
 			rcu_read_lock();
 			nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 		} else {
@@ -1655,7 +1631,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 
 	if (*name=='/') {
 		if (flags & LOOKUP_RCU) {
-			br_read_lock(&vfsmount_lock);
+			br_read_lock(vfsmount_lock);
 			rcu_read_lock();
 			set_root_rcu(nd);
 		} else {
@@ -1668,7 +1644,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 			struct fs_struct *fs = current->fs;
 			unsigned seq;
 
-			br_read_lock(&vfsmount_lock);
+			br_read_lock(vfsmount_lock);
 			rcu_read_lock();
 
 			do {
@@ -1704,7 +1680,7 @@ static int path_init(int dfd, const char *name, unsigned int flags,
 			if (fput_needed)
 				*fp = file;
 			nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
-			br_read_lock(&vfsmount_lock);
+			br_read_lock(vfsmount_lock);
 			rcu_read_lock();
 		} else {
 			path_get(&file->f_path);
@@ -1937,10 +1913,8 @@ static int user_path_parent(int dfd, const char __user *path,
 	char *s = getname(path);
 	int error;
 
-	if (IS_ERR(s)) {
-		*name = 0;
+	if (IS_ERR(s))
 		return PTR_ERR(s);
-	}
 
 	error = do_path_lookup(dfd, s, LOOKUP_PARENT, nd);
 	if (error)
