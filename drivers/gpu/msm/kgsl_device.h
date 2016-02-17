@@ -29,7 +29,6 @@
 #define KGSL_TIMEOUT_NONE           0
 #define KGSL_TIMEOUT_DEFAULT        0xFFFFFFFF
 #define KGSL_TIMEOUT_PART           50 /* 50 msec */
-#define KGSL_TIMEOUT_LONG_IB_DETECTION  2000 /* 2 sec*/
 
 #define FIRST_TIMEOUT (HZ / 2)
 
@@ -233,8 +232,6 @@ struct kgsl_memobj_node {
  * of a fault
  * @fault_recovery: recovery actions actually tried for this batch
  * @expires: Point in time when the cmdbatch is considered to be hung
- * @invalid:  non-zero if the dispatcher determines the command and the owning
- * context should be invalidated
  * @refcount: kref structure to maintain the reference count
  * @cmdlist: List of IBs to issue
  * @memlist: List of all memory used in this command batch
@@ -256,7 +253,6 @@ struct kgsl_cmdbatch {
 	unsigned long fault_policy;
 	unsigned long fault_recovery;
 	unsigned long expires;
-	int invalid;
 	struct kref refcount;
 	struct list_head cmdlist;
 	struct list_head memlist;
@@ -418,6 +414,8 @@ struct kgsl_process_private;
  * is set.
  * @flags: flags from userspace controlling the behavior of this context
  * @pwr_constraint: power constraint from userspace for this context
+ * @fault_count: number of times gpu hanged in last _context_throttle_time ms
+ * @fault_time: time of the first gpu hang in last _context_throttle_time ms
  */
 struct kgsl_context {
 	struct kref refcount;
@@ -435,6 +433,8 @@ struct kgsl_context {
 	unsigned int pagefault_ts;
 	unsigned int flags;
 	struct kgsl_pwr_constraint pwr_constraint;
+	unsigned int fault_count;
+	unsigned long fault_time;
 };
 
 /**
@@ -756,6 +756,27 @@ void kgsl_cmdbatch_destroy(struct kgsl_cmdbatch *cmdbatch);
 void kgsl_cmdbatch_destroy_object(struct kref *kref);
 
 /**
+* kgsl_process_private_get() - increment the refcount on a kgsl_process_private
+*   struct
+* @process: Pointer to the KGSL process_private
+*
+* Returns 0 if the structure is invalid and a reference count could not be
+* obtained, nonzero otherwise.
+*/
+static inline int kgsl_process_private_get(struct kgsl_process_private *process)
+{
+	int ret = 0;
+	if (process != NULL)
+		ret = kref_get_unless_zero(&process->refcount);
+	return ret;
+}
+
+void kgsl_process_private_put(struct kgsl_process_private *private);
+
+
+struct kgsl_process_private *kgsl_process_private_find(pid_t pid);
+
+/**
  * kgsl_cmdbatch_put() - Decrement the refcount for a command batch object
  * @cmdbatch: Pointer to the command batch object
  */
@@ -763,27 +784,6 @@ static inline void kgsl_cmdbatch_put(struct kgsl_cmdbatch *cmdbatch)
 {
 	if (cmdbatch)
 		kref_put(&cmdbatch->refcount, kgsl_cmdbatch_destroy_object);
-}
-
-/**
- * kgsl_cmdbatch_sync_pending() - return true if the cmdbatch is waiting
- * @cmdbatch: Pointer to the command batch object to check
- *
- * Return non-zero if the specified command batch is still waiting for sync
- * point dependencies to be satisfied
- */
-static inline int kgsl_cmdbatch_sync_pending(struct kgsl_cmdbatch *cmdbatch)
-{
-	int ret;
-
-	if (cmdbatch == NULL)
-		return 0;
-
-	spin_lock(&cmdbatch->lock);
-	ret = list_empty(&cmdbatch->synclist) ? 0 : 1;
-	spin_unlock(&cmdbatch->lock);
-
-	return ret;
 }
 
 /**
