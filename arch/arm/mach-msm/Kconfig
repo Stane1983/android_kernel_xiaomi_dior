@@ -3038,11 +3038,11 @@ config KRAIT_REGULATOR
 	 regulators running in ganged mode inside the PMIC. Enable
 	 this option to support such configurations.
 
-config XIAOMI_ARMANI_DTB
+config XIAOMI_DIOR_DTB
 	depends on ARCH_MSM8226
 	default n
-	bool "Xiaomi Armani Device DTBs"
+	bool "Xiaomi Dior Device DTBs"
 	help
-	  Only include Xiaomi Armani specific DTBs to limit the number that
+	  Only include Xiaomi Dior specific DTBs to limit the number that
 	  get built during kernel compilation.
 endif

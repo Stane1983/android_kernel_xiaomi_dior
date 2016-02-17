@@ -102,8 +102,8 @@ endif
    zreladdr-$(CONFIG_ARCH_MSM8226)	:= 0x00008000
 
 # Do not include QC default DTBs if not needed
-ifeq ($(CONFIG_XIAOMI_ARMANI_DTB),y)
-	dtb-$(CONFIG_ARCH_MSM8226)	+= msm8226-h2a.dtb
+ifeq ($(CONFIG_XIAOMI_DIOR_DTB),y)
+	dtb-$(CONFIG_ARCH_MSM8226)	+= msm8926-h3lte.dtb
 else
 	dtb-$(CONFIG_ARCH_MSM8226)	+= msm8226-sim.dtb
 	dtb-$(CONFIG_ARCH_MSM8226)	+= msm8226-fluid.dtb
