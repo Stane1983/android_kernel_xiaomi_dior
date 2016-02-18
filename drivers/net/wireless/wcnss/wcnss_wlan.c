@@ -270,10 +270,6 @@ static struct notifier_block wnb = {
 #define NVBIN_FILE_H3GBL "wlan/prima/WCNSS_qcom_wlan_nv_h3gbl.bin"
 #define NVBIN_FILE_H2A   "wlan/prima/WCNSS_qcom_wlan_nv.bin"
 
-static struct notifier_block wnb = {
-	.notifier_call = wcnss_notif_cb,
-};
-
 /*
  * On SMD channel 4K of maximum data can be transferred, including message
  * header, so NV fragment size as next multiple of 1Kb is 3Kb.
