@@ -660,8 +660,6 @@ static inline void refcount_group(struct adreno_perfcount_group *group,
 	if (lo)
 		*lo = group->regs[reg].offset;
 
-	if (hi)
-		*hi = group->regs[reg].offset_hi;
 }
 
 /**
@@ -714,7 +712,7 @@ int adreno_perfcounter_get(struct adreno_device *adreno_dev,
 		if ((group->regs[countable].kernelcount != 0) ||
 			(group->regs[countable].usercount != 0)) {
 				refcount_group(group, countable, flags,
-					offset, offset_hi);
+					offset, 0);
 				return 0;
 		}
 
@@ -731,7 +729,7 @@ int adreno_perfcounter_get(struct adreno_device *adreno_dev,
 		for (i = 0; i < group->reg_count; i++) {
 			if (group->regs[i].countable == countable) {
 				refcount_group(group, i, flags,
-					offset, offset_hi);
+					offset, 0);
 				return 0;
 			} else if (group->regs[i].countable ==
 			KGSL_PERFCOUNTER_NOT_USED) {
@@ -764,8 +762,6 @@ int adreno_perfcounter_get(struct adreno_device *adreno_dev,
 
 	if (offset)
 		*offset = group->regs[empty].offset;
-	if (offset_hi)
-		*offset_hi = group->regs[empty].offset_hi;
 
 	return ret;
 }
@@ -3371,7 +3367,7 @@ static long adreno_ioctl(struct kgsl_device_private *dev_priv,
 		if (result == 0) {
 			result = adreno_perfcounter_get(adreno_dev,
 				get->groupid, get->countable, &get->offset,
-				&get->offset_hi, PERFCOUNTER_FLAG_NONE);
+				0, PERFCOUNTER_FLAG_NONE);
 			kgsl_active_count_put(device);
 		}
 		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
