@@ -19,6 +19,7 @@
 #include <linux/kref.h>
 #include <linux/ktime.h>
 #include <linux/list.h>
+#include <linux/seq_file.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 
@@ -84,9 +85,6 @@ struct sync_timeline_ops {
 
 	/* optional */
 	void (*pt_value_str)(struct sync_pt *pt, char *str, int size);
-
-	/* optional */
-	void (*pt_log)(struct sync_pt *pt);
 };
 
 /**

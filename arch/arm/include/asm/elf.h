@@ -118,8 +118,8 @@ int dump_task_regs(struct task_struct *t, elf_gregset_t *elfregs);
 
 #define ELF_ET_DYN_BASE	(2 * TASK_SIZE / 3)
 
-/* When the program starts, a1 contains a pointer to a function to be 
-   registered with atexit, as per the SVR4 ABI.  A value of 0 means we 
+/* When the program starts, a1 contains a pointer to a function to be
+   registered with atexit, as per the SVR4 ABI.  A value of 0 means we
    have no such handler.  */
 #define ELF_PLAT_INIT(_r, load_addr)	(_r)->ARM_r0 = 0
 
@@ -130,10 +130,8 @@ struct mm_struct;
 extern unsigned long arch_randomize_brk(struct mm_struct *mm);
 #define arch_randomize_brk arch_randomize_brk
 
-#ifdef CONFIG_MMU
 #define ARCH_HAS_SETUP_ADDITIONAL_PAGES 1
 struct linux_binprm;
 int arch_setup_additional_pages(struct linux_binprm *, int);
-#endif
 
 #endif

@@ -1580,7 +1580,7 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 	struct snd_soc_dai_link *dai_link;
 	int ret, i, order;
 
-	mutex_lock(&card->mutex);
+	mutex_lock_nested(&card->mutex, SND_SOC_CARD_CLASS_INIT);
 
 
 	/* bind DAIs */
@@ -3238,15 +3238,7 @@ int snd_soc_register_card(struct snd_soc_card *card)
 	INIT_LIST_HEAD(&card->dapm_dirty);
 	card->instantiated = 0;
 	mutex_init(&card->mutex);
-	mutex_init(&card->dpcm_mutex);
-	mutex_init(&card->dapm_power_mutex);
 	mutex_init(&card->dapm_mutex);
-	ret = snd_soc_instantiate_card(card);
-	if (ret != 0) {
-		soc_cleanup_card_debugfs(card);
-		if (card->rtd)
-			kfree(card->rtd);
-	}
 
 
 	return ret;

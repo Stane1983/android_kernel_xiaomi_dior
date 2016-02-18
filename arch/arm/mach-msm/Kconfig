@@ -137,6 +137,7 @@ config ARCH_MSM8X60
 	select MSM_RUN_QUEUE_STATS
 	select ARM_HAS_SG_CHAIN
 	select USE_DEV_CTRL_VOLUME
+    select ARM_ERRATA_720789
 
 config ARCH_MSM8960
 	bool "MSM8960"

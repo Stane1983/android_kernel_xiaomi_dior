@@ -10,7 +10,6 @@
  */
 
 #include <linux/devfreq.h>
-#include <linux/module.h>
 #include "governor.h"
 
 static int devfreq_powersave_func(struct devfreq *df,
@@ -25,22 +24,14 @@ static int devfreq_powersave_func(struct devfreq *df,
 	return 0;
 }
 
-static int devfreq_powersave_handler(struct devfreq *devfreq,
-				unsigned int event, void *data)
+static int powersave_init(struct devfreq *devfreq)
 {
-	int ret = 0;
-
-	if (event == DEVFREQ_GOV_START || event == DEVFREQ_GOV_RESUME) {
-		mutex_lock(&devfreq->lock);
-		ret = update_devfreq(devfreq);
-		mutex_unlock(&devfreq->lock);
-	}
-
-	return ret;
+	return update_devfreq(devfreq);
 }
 
-static struct devfreq_governor devfreq_powersave = {
+const struct devfreq_governor devfreq_powersave = {
 	.name = "powersave",
+	.init = powersave_init,
 	.get_target_freq = devfreq_powersave_func,
 	.event_handler = devfreq_powersave_handler,
 };

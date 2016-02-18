@@ -31,21 +31,40 @@ typedef struct ion_handle *ion_user_handle_t;
  * @ION_HEAP_TYPE_CARVEOUT:	 memory allocated from a prereserved
  * 				 carveout heap, allocations are physically
  * 				 contiguous
- * @ION_HEAP_END:		helper for iterating over heaps
+ * @ION_HEAP_TYPE_DMA:		 memory allocated via DMA API
+ * @ION_NUM_HEAPS:		 helper for iterating over heaps, a bit mask
+ * 				 is used to identify the heaps, so only 32
+ * 				 total heap types are supported
  */
 enum ion_heap_type {
 	ION_HEAP_TYPE_SYSTEM,
 	ION_HEAP_TYPE_SYSTEM_CONTIG,
 	ION_HEAP_TYPE_CARVEOUT,
 	ION_HEAP_TYPE_CHUNK,
+	ION_HEAP_TYPE_DMA,
 	ION_HEAP_TYPE_CUSTOM, /* must be last so device specific heaps always
 				 are at the end of this enum */
-	ION_NUM_HEAPS,
+	ION_NUM_HEAPS = 16,
 };
 
 #define ION_HEAP_SYSTEM_MASK		(1 << ION_HEAP_TYPE_SYSTEM)
 #define ION_HEAP_SYSTEM_CONTIG_MASK	(1 << ION_HEAP_TYPE_SYSTEM_CONTIG)
 #define ION_HEAP_CARVEOUT_MASK		(1 << ION_HEAP_TYPE_CARVEOUT)
+#define ION_HEAP_TYPE_DMA_MASK		(1 << ION_HEAP_TYPE_DMA)
+
+#define ION_NUM_HEAP_IDS		sizeof(unsigned int) * 8
+
+/**
+ * allocation flags - the lower 16 bits are used by core ion, the upper 16
+ * bits are reserved for use by the heaps themselves.
+ */
+#define ION_FLAG_CACHED 1		/* mappings of this buffer should be
+					   cached, ion will do cache
+					   maintenance when the buffer is
+					   mapped for dma */
+#define ION_FLAG_CACHED_NEEDS_SYNC 2	/* mappings of this buffer will created
+					   at mmap time, if this is set
+					   caches must be managed manually */
 
 #define ION_NUM_HEAP_IDS		sizeof(unsigned int) * 8
 
@@ -93,10 +112,6 @@ struct ion_buffer;
  * @name:	used for debug purposes
  * @base:	base address of heap in physical memory if applicable
  * @size:	size of the heap in bytes if applicable
- * @memory_type:Memory type used for the heap
- * @has_outer_cache:    set to 1 if outer cache is used, 0 otherwise.
- * @extra_data:	Extra data specific to each heap type
- * @priv:	heap private data
  * @align:	required alignment in physical memory if applicable
  * @priv:	private info passed from the board file
  *
@@ -108,9 +123,6 @@ struct ion_platform_heap {
 	const char *name;
 	ion_phys_addr_t base;
 	size_t size;
-	enum ion_memory_types memory_type;
-	unsigned int has_outer_cache;
-	void *extra_data;
 	ion_phys_addr_t align;
 	void *priv;
 };
@@ -342,7 +354,7 @@ static inline int ion_handle_get_flags(struct ion_client *client,
  * @align:		required alignment of the allocation
  * @heap_id_mask:	mask of heap ids to allocate from
  * @flags:		flags passed to heap
- * @handle:		pointer that will be populated with a cookie to use to 
+ * @handle:		pointer that will be populated with a cookie to use to
  *			refer to this allocation
  *
  * Provided by userspace as an argument to the ioctl
@@ -350,7 +362,7 @@ static inline int ion_handle_get_flags(struct ion_client *client,
 struct ion_allocation_data {
 	size_t len;
 	size_t align;
-	unsigned int heap_mask;
+	unsigned int heap_id_mask;
 	unsigned int flags;
 	ion_user_handle_t handle;
 };

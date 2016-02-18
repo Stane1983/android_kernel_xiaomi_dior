@@ -30,26 +30,20 @@
  *
  */
 
-#define REALLY_WANT_TRACEPOINTS
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/oom.h>
 #include <linux/sched.h>
+#include <linux/swap.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
 #include <linux/swap.h>
 #include <linux/fs.h>
-
-#include <trace/events/memkill.h>
-
-#ifdef CONFIG_HIGHMEM
-#define _ZONE ZONE_HIGHMEM
-#else
-#define _ZONE ZONE_NORMAL
-#endif
 
 static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
@@ -73,7 +67,7 @@ static unsigned long lowmem_deathpending_timeout;
 #define lowmem_print(level, x...)			\
 	do {						\
 		if (lowmem_debug_level >= (level))	\
-			printk(x);			\
+			pr_info(x);			\
 	} while (0)
 
 static int test_task_flag(struct task_struct *p, int flag)
@@ -300,48 +294,21 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int tasksize;
 	int i;
 	int min_score_adj = OOM_SCORE_ADJ_MAX + 1;
+	int minfree = 0;
 	int selected_tasksize = 0;
 	int selected_oom_score_adj;
 	int array_size = ARRAY_SIZE(lowmem_adj);
-	int other_free;
-	int other_file;
-	unsigned long nr_to_scan = sc->nr_to_scan;
-	struct zone_avail zall[MAX_NUMNODES][MAX_NR_ZONES];
-
-	rcu_read_lock();
-	tsk = current->group_leader;
-	if ((tsk->flags & PF_EXITING) && test_task_flag(tsk, TIF_MEMDIE)) {
-		set_tsk_thread_flag(current, TIF_MEMDIE);
-		rcu_read_unlock();
-		return 0;
-	}
-	rcu_read_unlock();
-
-	if (nr_to_scan > 0) {
-		if (mutex_lock_interruptible(&scan_mutex) < 0)
-			return 0;
-	}
-
-	other_free = global_page_state(NR_FREE_PAGES);
-
-	if (global_page_state(NR_SHMEM) + total_swapcache_pages <
-		global_page_state(NR_FILE_PAGES))
-		other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM) -
-						total_swapcache_pages;
-	else
-		other_file = 0;
-
-	memset(zall, 0, sizeof(zall));
-	tune_lmk_param(&other_free, &other_file, sc, zall);
+	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
+	int other_file = global_page_state(NR_FILE_PAGES) -
+						global_page_state(NR_SHMEM);
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
 	for (i = 0; i < array_size; i++) {
-		if (other_free < lowmem_minfree[i] &&
-		    other_file < lowmem_minfree[i]) {
+		minfree = lowmem_minfree[i];
+		if (other_free < minfree && other_file < minfree) {
 			min_score_adj = lowmem_adj[i];
 			break;
 		}
@@ -436,16 +403,22 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
-		lowmem_print(2, "select %d (%s), adj %d, size %d, to kill\n",
-			     p->pid, p->comm, oom_score_adj, tasksize);
+		lowmem_print(2, "select '%s' (%d), adj %d, size %d, to kill\n",
+			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
 	if (selected) {
-		int i, j;
-		char zinfo[ZINFO_LENGTH];
-		char *p = zinfo;
-		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_score_adj, selected_tasksize);
+		lowmem_print(1, "Killing '%s' (%d), adj %d,\n" \
+				"   to free %ldkB on behalf of '%s' (%d) because\n" \
+				"   cache %ldkB is below limit %ldkB for oom_score_adj %d\n" \
+				"   Free memory is %ldkB above reserved\n",
+			     selected->comm, selected->pid,
+			     selected_oom_score_adj,
+			     selected_tasksize * (long)(PAGE_SIZE / 1024),
+			     current->comm, current->pid,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
+			     min_score_adj,
+			     other_free * (long)(PAGE_SIZE / 1024));
 		lowmem_deathpending_timeout = jiffies + HZ;
 
 		/* Due to MotoCare parser can't handle unfixed column,
@@ -681,6 +654,83 @@ static struct task_struct *pick_last_task(void)
 
 	return rb_entry(right, struct task_struct, adj_node);
 }
+#endif
+
+#ifdef CONFIG_ANDROID_LOW_MEMORY_KILLER_AUTODETECT_OOM_ADJ_VALUES
+static int lowmem_oom_adj_to_oom_score_adj(int oom_adj)
+{
+	if (oom_adj == OOM_ADJUST_MAX)
+		return OOM_SCORE_ADJ_MAX;
+	else
+		return (oom_adj * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE;
+}
+
+static void lowmem_autodetect_oom_adj_values(void)
+{
+	int i;
+	int oom_adj;
+	int oom_score_adj;
+	int array_size = ARRAY_SIZE(lowmem_adj);
+
+	if (lowmem_adj_size < array_size)
+		array_size = lowmem_adj_size;
+
+	if (array_size <= 0)
+		return;
+
+	oom_adj = lowmem_adj[array_size - 1];
+	if (oom_adj > OOM_ADJUST_MAX)
+		return;
+
+	oom_score_adj = lowmem_oom_adj_to_oom_score_adj(oom_adj);
+	if (oom_score_adj <= OOM_ADJUST_MAX)
+		return;
+
+	lowmem_print(1, "lowmem_shrink: convert oom_adj to oom_score_adj:\n");
+	for (i = 0; i < array_size; i++) {
+		oom_adj = lowmem_adj[i];
+		oom_score_adj = lowmem_oom_adj_to_oom_score_adj(oom_adj);
+		lowmem_adj[i] = oom_score_adj;
+		lowmem_print(1, "oom_adj %d => oom_score_adj %d\n",
+			     oom_adj, oom_score_adj);
+	}
+}
+
+static int lowmem_adj_array_set(const char *val, const struct kernel_param *kp)
+{
+	int ret;
+
+	ret = param_array_ops.set(val, kp);
+
+	/* HACK: Autodetect oom_adj values in lowmem_adj array */
+	lowmem_autodetect_oom_adj_values();
+
+	return ret;
+}
+
+static int lowmem_adj_array_get(char *buffer, const struct kernel_param *kp)
+{
+	return param_array_ops.get(buffer, kp);
+}
+
+static void lowmem_adj_array_free(void *arg)
+{
+	param_array_ops.free(arg);
+}
+
+static struct kernel_param_ops lowmem_adj_array_ops = {
+	.set = lowmem_adj_array_set,
+	.get = lowmem_adj_array_get,
+	.free = lowmem_adj_array_free,
+};
+
+static const struct kparam_array __param_arr_adj = {
+	.max = ARRAY_SIZE(lowmem_adj),
+	.num = &lowmem_adj_size,
+	.ops = &param_ops_int,
+	.elemsize = sizeof(lowmem_adj[0]),
+	.elem = lowmem_adj,
+};
 #endif
 
 module_param_named(cost, lowmem_shrinker.seeks, int, S_IRUGO | S_IWUSR);

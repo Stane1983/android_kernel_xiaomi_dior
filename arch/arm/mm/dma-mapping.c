@@ -732,6 +732,16 @@ static void dma_cache_maint_page(struct page *page, unsigned long offset,
 	pfn = page_to_pfn(page) + offset / PAGE_SIZE;
 	offset %= PAGE_SIZE;
 
+static void dma_cache_maint_page(struct page *page, unsigned long offset,
+	size_t size, enum dma_data_direction dir,
+	void (*op)(const void *, size_t, int))
+{
+	unsigned long pfn;
+	size_t left = size;
+
+	pfn = page_to_pfn(page) + offset / PAGE_SIZE;
+	offset %= PAGE_SIZE;
+
 	/*
 	 * A single sg entry may refer to multiple physically contiguous
 	 * pages.  But we still need to process highmem pages individually.
@@ -747,8 +757,13 @@ static void dma_cache_maint_page(struct page *page, unsigned long offset,
 		if (PageHighMem(page)) {
 			if (len + offset > PAGE_SIZE)
 				len = PAGE_SIZE - offset;
-
-			if (cache_is_vipt_nonaliasing()) {
+			vaddr = kmap_high_get(page);
+			if (vaddr) {
+				vaddr += offset;
+				op(vaddr, len, dir);
+				kunmap_high(page);
+			} else if (cache_is_vipt()) {
+				/* unmapped pages might still be cached */
 				vaddr = kmap_atomic(page);
 				op(vaddr + offset, len, dir);
 				kunmap_atomic(vaddr);

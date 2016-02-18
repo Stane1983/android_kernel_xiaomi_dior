@@ -303,33 +303,9 @@ enum snd_soc_pcm_subclass {
 	SND_SOC_PCM_CLASS_BE	= 1,
 };
 
-/*
- * Dynamic PCM DAI link states.
- */
-enum snd_soc_dpcm_state {
-	SND_SOC_DPCM_STATE_NEW	= 0,
-	SND_SOC_DPCM_STATE_OPEN,
-	SND_SOC_DPCM_STATE_HW_PARAMS,
-	SND_SOC_DPCM_STATE_PREPARE,
-	SND_SOC_DPCM_STATE_START,
-	SND_SOC_DPCM_STATE_STOP,
-	SND_SOC_DPCM_STATE_PAUSED,
-	SND_SOC_DPCM_STATE_SUSPEND,
-	SND_SOC_DPCM_STATE_HW_FREE,
-	SND_SOC_DPCM_STATE_CLOSE,
-};
-
-/*
- * Dynamic PCM trigger ordering. Triggering flexibility is required as some
- * DSPs require triggering before/after their clients/hosts.
- *
- * i.e. some clients may want to manually order this call in their PCM
- * trigger() whilst others will just use the regular core ordering.
- */
-enum snd_soc_dpcm_trigger {
-	SND_SOC_DPCM_TRIGGER_PRE		= 0,
-	SND_SOC_DPCM_TRIGGER_POST,
-	SND_SOC_DPCM_TRIGGER_BESPOKE,
+enum snd_soc_card_subclass {
+	SND_SOC_CARD_CLASS_INIT	= 0,
+	SND_SOC_CARD_CLASS_PCM	= 1,
 };
 
 int snd_soc_codec_set_sysclk(struct snd_soc_codec *codec, int clk_id,
@@ -876,12 +852,7 @@ struct snd_soc_card {
 
 	struct list_head list;
 	struct mutex mutex;
-	struct mutex dpcm_mutex;
-
 	struct mutex dapm_mutex;
-	struct mutex dapm_power_mutex;
-	struct mutex dsp_mutex;
-	spinlock_t dsp_spinlock;
 
 	bool instantiated;
 

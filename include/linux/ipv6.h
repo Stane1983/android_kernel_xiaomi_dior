@@ -29,7 +29,7 @@ struct ip6_mtuinfo {
 struct in6_ifreq {
 	struct in6_addr	ifr6_addr;
 	__u32		ifr6_prefixlen;
-	int		ifr6_ifindex; 
+	int		ifr6_ifindex;
 };
 
 #define IPV6_SRCRT_STRICT	0x01	/* Deprecated; will be removed */
@@ -55,7 +55,7 @@ struct ipv6_rt_hdr {
 struct ipv6_opt_hdr {
 	__u8 		nexthdr;
 	__u8 		hdrlen;
-	/* 
+	/*
 	 * TLV encoded option data follows.
 	 */
 } __attribute__((packed));	/* required for some archs */
@@ -166,6 +166,7 @@ struct ipv6_devconf {
 	__s32		accept_source_route;
 #ifdef CONFIG_IPV6_OPTIMISTIC_DAD
 	__s32		optimistic_dad;
+	__s32		use_optimistic;
 #endif
 #ifdef CONFIG_IPV6_MROUTE
 	__s32		mc_forwarding;
@@ -173,7 +174,7 @@ struct ipv6_devconf {
 	__s32		disable_ipv6;
 	__s32		accept_dad;
 	__s32		force_tllao;
-	__s32		accept_ra_prefix_route;
+	__s32		use_oif_addrs_only;
 	void		*sysctl;
 };
 
@@ -215,8 +216,9 @@ enum {
 	DEVCONF_DISABLE_IPV6,
 	DEVCONF_ACCEPT_DAD,
 	DEVCONF_FORCE_TLLAO,
-	DEVCONF_ACCEPT_RA_PREFIX_ROUTE,
 	DEVCONF_ACCEPT_RA_RT_TABLE,
+	DEVCONF_USE_OPTIMISTIC,
+	DEVCONF_USE_OIF_ADDRS_ONLY,
 	DEVCONF_MAX
 };
 
@@ -242,7 +244,7 @@ static inline __u8 ipv6_tclass(const struct ipv6hdr *iph)
 	return (ntohl(*(__be32 *)iph) >> 20) & 0xff;
 }
 
-/* 
+/*
    This structure contains results of exthdrs parsing
    as offsets from skb->nh.
  */
@@ -264,6 +266,7 @@ struct inet6_skb_parm {
 #define IP6SKB_XFRM_TRANSFORMED	1
 #define IP6SKB_FORWARDED	2
 #define IP6SKB_REROUTED		4
+#define IP6SKB_FRAGMENTED      16
 };
 
 #define IP6CB(skb)	((struct inet6_skb_parm*)((skb)->cb))

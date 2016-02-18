@@ -309,6 +309,15 @@ void machine_shutdown(void)
 {
 	preempt_disable();
 #ifdef CONFIG_SMP
+	/*
+	 * Disable preemption so we're guaranteed to
+	 * run to power off or reboot and prevent
+	 * the possibility of switching to another
+	 * thread that might wind up blocking on
+	 * one of the stopped CPUs.
+	 */
+	preempt_disable();
+
 	smp_send_stop();
 #endif
 }
@@ -316,6 +325,7 @@ void machine_shutdown(void)
 void machine_halt(void)
 {
 	machine_shutdown();
+	local_irq_disable();
 	while (1);
 }
 
@@ -341,6 +351,7 @@ void machine_restart(char *cmd)
 
 	/* Whoops - the platform was unable to reboot. Tell the user! */
 	printk("Reboot failed -- System halted\n");
+	local_irq_disable();
 	while (1);
 }
 
@@ -700,28 +711,22 @@ int in_gate_area_no_mm(unsigned long addr)
 
 const char *arch_vma_name(struct vm_area_struct *vma)
 {
-	if (is_gate_vma(vma))
-		return "[vectors]";
-	else if (vma->vm_mm && vma->vm_start == vma->vm_mm->context.sigpage)
-		return "[sigpage]";
-	else if (vma == get_user_timers_vma(NULL))
-		return "[timers]";
-	else
-		return NULL;
+	return is_gate_vma(vma) ? "[vectors]" :
+		(vma->vm_mm && vma->vm_start == vma->vm_mm->context.sigpage) ?
+		 "[sigpage]" : NULL;
 }
 
-static struct page *signal_page;
 extern struct page *get_signal_page(void);
 
 int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
 	struct mm_struct *mm = current->mm;
+	struct page *page;
 	unsigned long addr;
 	int ret;
 
-	if (!signal_page)
-		signal_page = get_signal_page();
-	if (!signal_page)
+	page = get_signal_page();
+	if (!page)
 		return -ENOMEM;
 
 	down_write(&mm->mmap_sem);
@@ -733,7 +738,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 
 	ret = install_special_mapping(mm, addr, PAGE_SIZE,
 		VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
-		&signal_page);
+		&page);
 
 	if (ret == 0)
 		mm->context.sigpage = addr;

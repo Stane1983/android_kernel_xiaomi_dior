@@ -222,7 +222,7 @@ static struct mem_type mem_types[] = {
 		.prot_l1	= PMD_TYPE_TABLE,
 		.prot_sect	= PROT_SECT_DEVICE | PMD_SECT_WB,
 		.domain		= DOMAIN_IO,
-	},	
+	},
 	[MT_DEVICE_WC] = {	/* ioremap_wc */
 		.prot_pte	= PROT_PTE_DEVICE | L_PTE_MT_DEV_WC,
 		.prot_l1	= PMD_TYPE_TABLE,
@@ -579,7 +579,7 @@ static void __init build_mem_type_table(void)
 #endif
 
 	for (i = 0; i < 16; i++) {
-		unsigned long v = pgprot_val(protection_map[i]);
+		pteval_t v = pgprot_val(protection_map[i]);
 		protection_map[i] = __pgprot(v | user_pgprot);
 	}
 
@@ -1256,7 +1256,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 #else
 	map.type = MT_LOW_VECTORS;
 #endif
-	create_mapping(&map);
+	create_mapping(&map, false);
 
 	if (!vectors_high()) {
 		map.virtual = 0;
@@ -1270,7 +1270,7 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	map.virtual = 0xffff0000 + PAGE_SIZE;
 	map.length = PAGE_SIZE;
 	map.type = MT_LOW_VECTORS;
-	create_mapping(&map);
+	create_mapping(&map, false);
 
 	/*
 	 * Ask the machine support to map in the statically mapped devices.
@@ -1278,20 +1278,6 @@ static void __init devicemaps_init(struct machine_desc *mdesc)
 	if (mdesc->map_io)
 		mdesc->map_io();
 	fill_pmd_gaps();
-
-	if (use_user_accessible_timers()) {
-		/*
-		 * Generate a mapping for the timer page.
-		 */
-		int page_addr = get_timer_page_address();
-		if (page_addr != ARM_USER_ACCESSIBLE_TIMERS_INVALID_PAGE) {
-			map.pfn = __phys_to_pfn(page_addr);
-			map.virtual = CONFIG_ARM_USER_ACCESSIBLE_TIMER_BASE;
-			map.length = PAGE_SIZE;
-			map.type = MT_DEVICE_USER_ACCESSIBLE;
-			create_mapping(&map);
-		}
-	}
 
 	/*
 	 * Finally flush the caches and tlb to ensure that we're in a
